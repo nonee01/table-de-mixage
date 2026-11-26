@@ -1,0 +1,23 @@
+# Construit la table de mixage sous Windows et publie le dossier « clé USB » en artefact.
+name: Windows
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests du moteur
+        run: cargo test -p moteur
+      - name: Dossier clé USB
+        shell: bash
+        run: bash packaging/windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Table-de-mixage-windows
+          path: dist/Table de mixage/
