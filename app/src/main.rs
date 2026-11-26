@@ -13,6 +13,11 @@ use eframe::egui;
 use moteur::table::ReglagesTable;
 
 fn main() -> eframe::Result {
+    // Vulkan plante dans le pilote Intel (igvk64.dll) du hp sous Windows : DirectX 12, sauf choix contraire
+    #[cfg(windows)]
+    if std::env::var_os("WGPU_BACKEND").is_none() {
+        std::env::set_var("WGPU_BACKEND", "dx12");
+    }
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_title("Table de mixage").with_inner_size([1060.0, 720.0]),
         ..Default::default()

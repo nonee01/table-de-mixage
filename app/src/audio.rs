@@ -109,6 +109,11 @@ fn choisir_config(
     candidates.into_iter().next().map(|c| c.with_max_sample_rate()).ok_or_else(|| "Format non pris en charge".into())
 }
 
+/// Seule la disparition du périphérique le rend « perdu » ; un craquement (xrun) ou un changement de route non.
+fn est_perte(e: &cpal::Error) -> bool {
+    matches!(e.kind(), cpal::ErrorKind::DeviceNotAvailable | cpal::ErrorKind::HostUnavailable)
+}
+
 struct Entree {
     flux: cpal::Stream,
 }
@@ -124,7 +129,12 @@ fn ouvrir_entree(
     let mut reech = Reechantillonneur::new(config.sample_rate, config.channels as usize);
     let ratio = FE / config.sample_rate as f32;
     let canaux = config.channels as usize;
-    let erreur = move |_e: cpal::Error| perdu.store(true, Ordering::Relaxed);
+    let erreur = move |e: cpal::Error| {
+        eprintln!("micro: {e}"); // invisible d'habitude ; lisible quand stderr est redirigé
+        if est_perte(&e) {
+            perdu.store(true, Ordering::Relaxed);
+        }
+    };
     let flux = match sc.sample_format() {
         SampleFormat::F32 => device.build_input_stream(
             config,
@@ -369,7 +379,12 @@ impl Audio {
             sortie.build_output_stream(
                 config,
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| m.remplir(data, canaux),
-                move |_e: cpal::Error| perdu.store(true, Ordering::Relaxed),
+                move |e: cpal::Error| {
+                    eprintln!("sortie: {e}");
+                    if est_perte(&e) {
+                        perdu.store(true, Ordering::Relaxed);
+                    }
+                },
                 None,
             )
         };
@@ -426,6 +441,13 @@ mod tests {
             assert!(v.len() > 2 * 48_000, "{}", v.len());
             std::fs::remove_file(p).unwrap();
         }
+    }
+
+    #[test]
+    fn un_craquement_ne_perd_pas_le_micro() {
+        assert!(!est_perte(&cpal::Error::new(cpal::ErrorKind::Xrun)));
+        assert!(!est_perte(&cpal::Error::new(cpal::ErrorKind::DeviceChanged)));
+        assert!(est_perte(&cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable)));
     }
 
     #[test]

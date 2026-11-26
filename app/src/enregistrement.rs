@@ -52,7 +52,9 @@ impl Enregistrement {
             let mut res = Ok(());
             loop {
                 let fini = stop.load(Ordering::Relaxed);
-                let n = cons.pop_slice(&mut tampon) / 2 * 2;
+                // jamais une demi-paire : le fil audio pousse avant puis après, on peut lire entre les deux
+                let pair = (cons.occupied_len() / 2 * 2).min(tampon.len());
+                let n = cons.pop_slice(&mut tampon[..pair]);
                 for p in tampon[..n].chunks_exact(2) {
                     if res.is_ok() {
                         res = avant.write_sample(en_i16(p[0])).and_then(|_| apres.write_sample(en_i16(p[1]))).map_err(|e| e.to_string());
@@ -95,7 +97,11 @@ mod tests {
         let base = dossier.join("Micro 1.wav");
         let (mut prod, cons) = HeapRb::<f32>::new(8192).split();
         let r = Enregistrement::demarrer(&base, cons).map_err(|e| e.1).unwrap();
-        for _ in 0..480 {
+        // une demi-paire laissée au fil d'écriture : il doit attendre l'autre moitié
+        prod.try_push(1.0).unwrap();
+        std::thread::sleep(Duration::from_millis(60));
+        prod.try_push(0.5).unwrap();
+        for _ in 1..480 {
             prod.try_push(1.0).unwrap();
             prod.try_push(0.5).unwrap();
         }
