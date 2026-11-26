@@ -64,6 +64,22 @@ jobs:
           name: Table-de-mixage-windows
           path: dist/Table de mixage/
 
+  # le chemin du professeur : construire.bat sur un Windows neuf (les outils C++ y sont déjà, Rust aussi)
+  construire-bat:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: construire.bat
+        shell: cmd
+        run: construire.bat /ci
+      - name: Le dossier est complet
+        shell: bash
+        run: |
+          cd "dist/Table de mixage"
+          ls -la . piper voix | head -40
+          test -f table-de-mixage.exe && test -f piper/piper.exe && test -f voix/fr_FR-siwis-medium.onnx
+          echo "Bonjour, ceci est un test." | ./piper/piper.exe -m voix/fr_FR-siwis-medium.onnx -f test.wav
+          test -s test.wav
 
   release:
     needs: windows

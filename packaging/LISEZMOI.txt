@@ -7,6 +7,9 @@ DEMARRER
   Ecoutez au casque ou aux ecouteurs : micro + haut-parleurs du PC = effet Larsen.
 
 SI WINDOWS REFUSE DE LE LANCER
+  Pour savoir si Smart App Control est actif, dans l'invite de commandes (cmd) :
+    reg query HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState
+  0x1 = actif (il faut le desactiver, voir ci-dessous) ; 0x0, 0x2 ou rien = le programme se lance.
   « Windows a protege votre ordinateur » (SmartScreen) : Informations complementaires,
   puis Executer quand meme.
   « Une partie de cette application a ete bloquee » (Smart App Control) : le programme

@@ -18,6 +18,7 @@ Dans [Releases](https://github.com/nonee01/table-de-mixage/releases), le zip « 
 ## Construire
 
 - Linux : `cargo run --release -p table-de-mixage`
+- Windows, sans rien d'installé : double-cliquer sur `construire.bat`. Il installe les outils C++ de Microsoft et Rust s'ils manquent (environ 5 Go et 30 à 45 minutes la première fois), construit, ajoute la voix de synthèse dans `dist\Table de mixage\`, puis lance la table. Il s'arrête tout de suite si Smart App Control est actif, car celui-ci bloquerait aussi un programme construit sur place.
 - Windows, depuis Linux : `bash packaging/windows.sh` (cargo-xwin) ; sous Windows ou dans GitHub Actions, le même script construit en natif.
 - L'appli téléphone : `telephone/construire.sh` (NDK Android, Rust, Gradle).
 

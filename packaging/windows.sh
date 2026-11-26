@@ -25,7 +25,6 @@ if [ ! -f "$VOIX" ]; then
   VOIX="$CACHE/fr_FR-siwis-medium.onnx"
   HF=https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/siwis/medium
   [ -f "$VOIX" ] || curl -sSL -o "$VOIX" "$HF/fr_FR-siwis-medium.onnx"
-  [ -f "$VOIX.json" ] || curl -sSL -o "$VOIX.json" "$HF/fr_FR-siwis-medium.onnx.json"
 fi
 
 rm -rf "$SORTIE"
@@ -33,20 +32,14 @@ mkdir -p "$SORTIE/voix" "$SORTIE/telephone"
 cp "$EXE" "$SORTIE/"
 unzip -q "$PIPER_ZIP" -d "$SORTIE"
 cp "$VOIX" "$SORTIE/voix/"
-# le Piper Windows de 2023 refuse les phonèmes de plusieurs caractères (diphtongues anglaises, inutiles en français)
-"$PY" -I -c '
-import json, sys
-src, dst = sys.argv[1], sys.argv[2]
-c = json.load(open(src, encoding="utf-8"))
-c["phoneme_id_map"] = {k: v for k, v in c["phoneme_id_map"].items() if len(k) == 1}
-json.dump(c, open(dst, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-' "$VOIX.json" "$SORTIE/voix/fr_FR-siwis-medium.onnx.json"
+# le Piper Windows de 2023 refuse les phonèmes de plusieurs caractères : packaging/voix en a une copie sans eux
+cp packaging/voix/fr_FR-siwis-medium.onnx.json "$SORTIE/voix/"
 
 APK=telephone/app/build/outputs/apk/debug/app-debug.apk
 if [ -f "$APK" ]; then cp "$APK" "$SORTIE/telephone/Micro table.apk"; else echo "attention : APK absent (telephone/construire.sh)" >&2; fi
 
-# fins de ligne Windows pour le .bat et le texte
-sed 's/$/\r/' packaging/lancer.bat > "$SORTIE/Lancer la table de mixage.bat"
+# le .bat est déjà en fins de ligne Windows (.gitattributes) ; le texte, on le convertit
+cp packaging/lancer.bat "$SORTIE/Lancer la table de mixage.bat"
 sed 's/$/\r/' packaging/LISEZMOI.txt > "$SORTIE/LISEZMOI.txt"
 
 rm -f dist/Table-de-mixage-windows.zip
