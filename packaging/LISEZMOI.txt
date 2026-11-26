@@ -7,9 +7,13 @@ DEMARRER
   Ecoutez au casque ou aux ecouteurs : micro + haut-parleurs du PC = effet Larsen.
 
 SI WINDOWS REFUSE DE LE LANCER
-  « Windows a protege votre ordinateur » : Informations complementaires, puis Executer quand meme.
-  Smart App Control peut bloquer un programme non signe : ouvrez une invite de commandes
-  (touche Windows, tapez cmd), glissez « Lancer la table de mixage.bat » dedans, Entree.
+  « Windows a protege votre ordinateur » (SmartScreen) : Informations complementaires,
+  puis Executer quand meme.
+  « Une partie de cette application a ete bloquee » (Smart App Control) : le programme
+  n'est pas signe. Parametres > Confidentialite et securite > Securite Windows >
+  Controle des applications et du navigateur > Smart App Control > Desactive.
+  Depuis la mise a jour d'avril 2026 de Windows 11, on peut le reactiver ensuite
+  au meme endroit.
 
 LE TELEPHONE COMME MICRO (Android 9 ou plus)
   1. Installez telephone\Micro table.apk sur le telephone (copie par cable ou par message,
