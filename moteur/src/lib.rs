@@ -3,6 +3,7 @@
 
 pub mod anti_bruit;
 pub mod coupe_cri;
+pub mod egaliseur;
 pub mod limiteur;
 pub mod niveau;
 
