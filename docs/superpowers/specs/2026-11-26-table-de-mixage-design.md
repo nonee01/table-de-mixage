@@ -9,7 +9,7 @@ that suppresses noise, so that a scream into the microphone does not come out, h
 The program is shown live on Tuesday on Yassine's laptop, and the teacher keeps a copy for his own
 Windows PC. It should show the course at work: sampling, FIR filters, spectra in dB.
 
-Success on Tuesday: Yassine talks into his earbuds or his phone, the voice comes out clean; he screams,
+Success on Tuesday: Yassine talks into his phone (on USB, the demo microphone; earbuds as fallback), the voice comes out clean; he screams,
 and depending on which block is switched on the scream comes out at talking level or not at all; a fan
 or hum in the room disappears when Anti-bruit is ticked; the plot shows each of these happening.
 
@@ -40,7 +40,7 @@ or hum in the room disappears when Anti-bruit is ticked; the plot shows each of 
 ## Constraints
 
 - Four working days: Thursday 26 to Monday 30 November, demo Tuesday morning.
-- Inputs available: laptop mic or wired earbuds mic, and Yassine's Redmi phone over USB.
+- Inputs available: Yassine's Redmi phone over USB, the demo microphone (decided 26 November), live like any mic; laptop mic or wired earbuds mic as fallback.
   Bluetooth earbuds would drop to 16 kHz hands-free mode on Windows; wired earbuds are the safe choice.
 - Feedback (Larsen) risk: an open mic plus laptop speakers will howl. The demo listens on earbuds or
   headphones; if speakers are used for the room, keep the mic (the phone) away from them and the

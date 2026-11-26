@@ -333,25 +333,28 @@ Tests live in `#[cfg(test)] mod tests` at the bottom of each file. Shared test h
 - [ ] **Step 4:** Run `cargo test -p table-de-mixage enregistreur`. Expected: PASS.
 - [ ] **Step 5:** Commit `app: enregistrement de la sortie`.
 
-### Task 12: Phone microphone
+### Task 12: Phone microphone (the demo mic)
+
+Decided 2026-11-26: the Redmi over USB is the microphone for the demo, so this task is required and live (same delay bound as any mic). Built after Task 11, on the day in the schedule.
 
 **Files:** Create `app/src/telephone.rs`; modify `app/src/audio.rs`, `app/src/ui.rs`
 
 **Interfaces:**
-- Consumes: `anneau::Reechantillonneur`, the Micro 2 ring producer inside `Audio::demarrer`.
+- Consumes: `anneau::Reechantillonneur`, the Micro 1 or Micro 2 ring producer inside `Audio::demarrer` (whichever channel has Téléphone selected).
 - Produces: `trouver_adb() -> Option<PathBuf>` (`<exe dir>/telephone/adb[.exe]`, then PATH); `trouver_serveur() -> Option<PathBuf>` (`<exe dir>/telephone/scrcpy-server`, then `/usr/share/scrcpy/scrcpy-server`); `Telephone::demarrer(adb: &Path, serveur: &Path, prod: HeapProd<f32>) -> Result<Telephone, String>` (returns within 5 s, error text in French for: no device, device unauthorised, Android below 11); dropping it stops the server and removes the forward.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```rust
 #[test] fn adb_absent() { /* Telephone::demarrer with /nonexistent/adb: Err within 1 s */ }
+#[test] fn fin_de_flux_marque_perdu() { /* a local TcpListener writes 480 s16le stereo frames then closes: the reader pushes 480 samples into the ring and sets the lost flag within 1 s */ }
 #[test] fn paquet_brut_vers_mono() { /* decode a byte buffer of s16le stereo frames with fn pcm_vers_mono(&[u8]) -> Vec<f32>: [(16384, -16384), (32767, 32767)] -> [0.0, ~1.0] */ }
 ```
 
 - [ ] **Step 2:** Run `cargo test -p table-de-mixage telephone`. Expected: FAIL.
-- [ ] **Step 3:** Implement following `doc/develop.md` of scrcpy 5.0.1 (check the option names against that version): `adb push <serveur> /data/local/tmp/scrcpy-server.jar`; `adb forward tcp:<port> localabstract:scrcpy_<scid>` with a random 31-bit hex `scid`; start `adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 5.0.1 scid=<scid> tunnel_forward=true video=false control=false audio=true audio_source=mic-unprocessed audio_codec=raw raw_stream=true`; connect the TCP socket with retries for up to 5 s; read s16le stereo 48 kHz, `pcm_vers_mono`, push into the Micro 2 ring. `SourceMicro::Telephone` appears in the Micro 2 combo only when `trouver_adb()` and `trouver_serveur()` succeed.
+- [ ] **Step 3:** Implement following `doc/develop.md` of scrcpy 5.0.1 (check the option names against that version): `adb push <serveur> /data/local/tmp/scrcpy-server.jar`; `adb forward tcp:<port> localabstract:scrcpy_<scid>` with a random 31-bit hex `scid`; start `adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 5.0.1 scid=<scid> tunnel_forward=true video=false control=false audio=true audio_source=mic-unprocessed audio_codec=raw raw_stream=true`; connect the TCP socket with retries for up to 5 s; read s16le stereo 48 kHz, `pcm_vers_mono`, push into that channel's ring. The ring goes through the same `borner` (packet size + 2 blocks) as the other mics, so the phone cannot pile up delay, and the status latency includes it. End of stream or a socket error sets the channel's `perdu` flag (`Téléphone perdu` in the box); picking Téléphone again reconnects. `SourceMicro::Telephone` appears in the Micro 1 and Micro 2 combos when `trouver_adb()` and `trouver_serveur()` succeed; at start, Micro 1 defaults to Téléphone when `adb devices` lists one authorised device, else to the default mic.
 - [ ] **Step 4:** Run `cargo test -p table-de-mixage telephone`. Expected: PASS.
-- [ ] **Step 5:** Manual with the Redmi on USB (`adb -s 3ad2f4880013` is the Redmi; pass `-s` when several devices are attached): pick Téléphone in Micro 2, talk into the phone, scream with Coupe-cri on.
+- [ ] **Step 5:** Manual on the hp with the Redmi on USB (`adb -s 3ad2f4880013` is the Redmi; pass `-s` when several devices are attached): Micro 1 = Téléphone, talk into the phone, scream with Limiteur then Coupe-cri on. Live check: Micro 2 = laptop mic, clap once next to both, record 5 s (Task 11); the gap between the two clicks in the WAV is the phone's extra delay (target under 80 ms; note the value in the ledger). Unplug the phone: `Téléphone perdu` within 2 s, the rest keeps mixing; replug and pick Téléphone again.
 - [ ] **Step 6:** Commit `app: micro du téléphone par scrcpy`.
 
 ### Task 13: Windows build, zip, rehearsal
@@ -364,7 +367,7 @@ Tests live in `#[cfg(test)] mod tests` at the bottom of each file. Shared test h
 - [ ] **Step 1:** Load the `windows-desktop-packaging` skill (Windows over SSH, screenshots, Smart App Control). Write `packaging/windows.sh`: `cargo xwin build --release --target x86_64-pc-windows-msvc -p table-de-mixage`, then assemble `dist/Table de mixage/` with the exe, `piper/` (from the standalone `piper_windows_amd64.zip` release), `voix/` (the siwis voice), `telephone/` (`adb.exe`, `AdbWinApi.dll`, `AdbWinUsbApi.dll` from Google platform-tools for Windows, and `/usr/share/scrcpy/scrcpy-server`), `LISEZMOI.txt`, and zip it to `dist/Table-de-mixage-windows.zip`. Downloads are cached in `packaging/cache/` (git-ignored).
 - [ ] **Step 2:** Write `LISEZMOI.txt` in French: how to start, how to plug the phone (USB debugging), the six demo steps from the spec.
 - [ ] **Step 3:** Run `bash packaging/windows.sh`. Expected: the zip exists, under 150 MB.
-- [ ] **Step 4:** Copy the zip to hp-win with laptop-link (dry-run first, then `--apply`), unzip, start it, take a screenshot over SSH. Check: window opens, Micro 1 on the default mic, Voix speaks, a scream is limited and then cut.
+- [ ] **Step 4:** Copy the zip to hp-win with laptop-link (dry-run first, then `--apply`), unzip, start it, take a screenshot over SSH. Before: authorise USB debugging for hp-win on the Redmi, and check that Windows installed an ADB driver for it (`adb devices` lists it; if not, install the Google USB driver and say so in LISEZMOI). Check: window opens, Micro 1 on the phone, Voix speaks, a scream is limited and then cut.
 - [ ] **Step 5:** Run the six demo steps on Windows and on the asus. Fix what fails.
 - [ ] **Step 6:** Following the `project-media` skill, put the window screenshot and a short demo recording in `media/` with `media/README.md`.
 - [ ] **Step 7:** Commit `packaging: zip Windows, LISEZMOI, médias`.
@@ -381,4 +384,4 @@ Tests live in `#[cfg(test)] mod tests` at the bottom of each file. Shared test h
 | Sun 29 | 12, first run of 13 on hp-win |
 | Mon 30 | 13 finished, rehearsal, freeze in the evening |
 
-If a day slips, drop in this order: the EQ (Task 5 and its sliders), the phone (Task 12, Micro 2 keeps ordinary devices), recording (Task 11).
+If a day slips, drop in this order: the EQ (Task 5 and its sliders), recording (Task 11; the Task 12 delay check then uses the plot instead). The phone (Task 12) is not dropped: it is the demo microphone.
