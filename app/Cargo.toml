@@ -1,0 +1,12 @@
+[package]
+name = "table-de-mixage"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "table-de-mixage"
+path = "src/main.rs"
+
+[dependencies]
+moteur = { path = "../moteur" }
+eframe = "0.37"
