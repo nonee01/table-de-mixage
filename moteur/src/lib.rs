@@ -4,8 +4,11 @@
 pub mod anti_bruit;
 pub mod coupe_cri;
 pub mod egaliseur;
+pub mod generateur;
 pub mod limiteur;
 pub mod niveau;
+pub mod table;
+pub mod voie;
 
 /// Fréquence d'échantillonnage (Hz).
 pub const FE: f32 = 48_000.0;
