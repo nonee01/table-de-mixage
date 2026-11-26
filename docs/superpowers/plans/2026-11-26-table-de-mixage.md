@@ -314,7 +314,9 @@ Tests live in `#[cfg(test)] mod tests` at the bottom of each file. Shared test h
 - [ ] **Step 6:** Manual: play an MP3 under your voice; type `Bonjour monsieur` and press Dire; switch the Bruit type.
 - [ ] **Step 7:** Commit `app: musique, voix de synthèse, bruit de test`.
 
-### Task 11: Recording
+### Task 11: Recording (dropped 2026-11-26)
+
+Dropped by the user: not in the demo's success test. The phone delay check in Task 12 uses the plot instead. The unused recording ring in `audio.rs` was removed.
 
 **Files:** Create `app/src/enregistreur.rs`; modify `app/src/ui.rs`
 
@@ -352,9 +354,9 @@ Decided 2026-11-26: the Redmi over USB is the microphone for the demo, so this t
 ```
 
 - [ ] **Step 2:** Run `cargo test -p table-de-mixage telephone`. Expected: FAIL.
-- [ ] **Step 3:** Implement following `doc/develop.md` of scrcpy 5.0.1 (check the option names against that version): `adb push <serveur> /data/local/tmp/scrcpy-server.jar`; `adb forward tcp:<port> localabstract:scrcpy_<scid>` with a random 31-bit hex `scid`; start `adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 5.0.1 scid=<scid> tunnel_forward=true video=false control=false audio=true audio_source=mic-unprocessed audio_codec=raw raw_stream=true`; connect the TCP socket with retries for up to 5 s; read s16le stereo 48 kHz, `pcm_vers_mono`, push into that channel's ring. The ring goes through the same `borner` (packet size + 2 blocks) as the other mics, so the phone cannot pile up delay, and the status latency includes it. End of stream or a socket error sets the channel's `perdu` flag (`Téléphone perdu` in the box); picking Téléphone again reconnects. `SourceMicro::Telephone` appears in the Micro 1 and Micro 2 combos when `trouver_adb()` and `trouver_serveur()` succeed; at start, Micro 1 defaults to Téléphone when `adb devices` lists one authorised device, else to the default mic.
+- [ ] **Step 3:** Implement following `doc/develop.md` of scrcpy 5.0.1 (check the option names against that version): `adb push <serveur> /data/local/tmp/scrcpy-server.jar`; `adb forward tcp:<port> localabstract:scrcpy_<scid>` with a random 31-bit hex `scid`; start `adb shell CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 5.0.1 scid=<scid> tunnel_forward=true video=false control=false audio=true audio_source=mic-unprocessed audio_codec=raw raw_stream=true`; connect the TCP socket with retries for up to 5 s; read s16le stereo 48 kHz, `pcm_vers_mono`, push into that channel's ring. The ring goes through the same `borner` (packet size + 2 blocks) as the other mics, so the phone cannot pile up delay, and the status latency includes it. End of stream or a socket error sets the channel's `perdu` flag (`Téléphone perdu` in the box); picking Téléphone again reconnects. `SourceMicro::Telephone` appears in the Micro 1 and Micro 2 combos when `trouver_adb()` and `trouver_serveur()` succeed (picked by hand; no automatic switch at start, dropped 2026-11-26). The device is the first authorised one at Android 11 or above. `adb forward tcp:0` picks the port. The server deletes its jar on start, so it is pushed every time.
 - [ ] **Step 4:** Run `cargo test -p table-de-mixage telephone`. Expected: PASS.
-- [ ] **Step 5:** Manual on the hp with the Redmi on USB (`adb -s 3ad2f4880013` is the Redmi; pass `-s` when several devices are attached): Micro 1 = Téléphone, talk into the phone, scream with Limiteur then Coupe-cri on. Live check: Micro 2 = laptop mic, clap once next to both, record 5 s (Task 11); the gap between the two clicks in the WAV is the phone's extra delay (target under 80 ms; note the value in the ledger). Unplug the phone: `Téléphone perdu` within 2 s, the rest keeps mixing; replug and pick Téléphone again.
+- [ ] **Step 5:** Manual on the hp with the Redmi on USB (`adb -s 3ad2f4880013` is the Redmi; pass `-s` when several devices are attached): Micro 1 = Téléphone, talk into the phone, scream with Limiteur then Coupe-cri on. Live check: Micro 2 = laptop mic, clap once next to both, watch the Signal view; the gap between the phone's click and the laptop mic's click is the phone's extra delay (target under 80 ms; note the value in the ledger). Unplug the phone: `Téléphone perdu` within 2 s, the rest keeps mixing; replug and pick Téléphone again.
 - [ ] **Step 6:** Commit `app: micro du téléphone par scrcpy`.
 
 ### Task 13: Windows build, zip, rehearsal
@@ -369,7 +371,7 @@ Decided 2026-11-26: the Redmi over USB is the microphone for the demo, so this t
 - [ ] **Step 3:** Run `bash packaging/windows.sh`. Expected: the zip exists, under 150 MB.
 - [ ] **Step 4:** Copy the zip to hp-win with laptop-link (dry-run first, then `--apply`), unzip, start it, take a screenshot over SSH. Before: authorise USB debugging for hp-win on the Redmi, and check that Windows installed an ADB driver for it (`adb devices` lists it; if not, install the Google USB driver and say so in LISEZMOI). Check: window opens, Micro 1 on the phone, Voix speaks, a scream is limited and then cut.
 - [ ] **Step 5:** Run the six demo steps on Windows and on the asus. Fix what fails.
-- [ ] **Step 6:** Following the `project-media` skill, put the window screenshot and a short demo recording in `media/` with `media/README.md`.
+- [ ] **Step 6:** Following the `project-media` skill, put the window screenshot in `media/` (no demo recording: a phone video of the rehearsal does that job) with `media/README.md`.
 - [ ] **Step 7:** Commit `packaging: zip Windows, LISEZMOI, médias`.
 
 ---
@@ -384,4 +386,4 @@ Decided 2026-11-26: the Redmi over USB is the microphone for the demo, so this t
 | Sun 29 | 12, first run of 13 on hp-win |
 | Mon 30 | 13 finished, rehearsal, freeze in the evening |
 
-If a day slips, drop in this order: the EQ (Task 5 and its sliders), recording (Task 11; the Task 12 delay check then uses the plot instead). The phone (Task 12) is not dropped: it is the demo microphone.
+If a day slips, drop the EQ (Task 5 and its sliders). Recording (Task 11) is already dropped. The phone (Task 12) is not dropped: it is the demo microphone.

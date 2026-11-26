@@ -13,6 +13,7 @@ use ringbuf::{HeapCons, HeapProd, HeapRb};
 use triple_buffer::TripleBuffer;
 
 use crate::sources::{LecteurMusique, Voix};
+use crate::telephone::{self, Telephone};
 use crate::anneau::{borner, catmull_rom, tirer_bloc, Reechantillonneur};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -55,14 +56,14 @@ pub struct LiensUi {
     pub sonde_sortie: HeapCons<f32>,
     pub musique: LecteurMusique,
     pub voix: Voix,
-    /// Stéréo entrelacée de la sortie, quand `enregistrer` est vrai.
-    pub enregistrement: HeapCons<f32>,
-    pub enregistrer: Arc<AtomicBool>,
+    /// Micro 1, Micro 2 : pourquoi la source choisie n'a pas pu s'ouvrir (téléphone).
+    pub erreurs_micro: [Option<String>; 2],
 }
 
 pub struct Audio {
     _sortie: cpal::Stream,
     _entrees: Vec<cpal::Stream>,
+    _telephones: Vec<Telephone>,
 }
 
 fn nom(d: &cpal::Device) -> String {
@@ -163,8 +164,6 @@ struct Moteur {
     voix: HeapCons<f32>,
     sonde_e: HeapProd<f32>,
     sonde_s: HeapProd<f32>,
-    enregistrement: HeapProd<f32>,
-    enregistrer: Arc<AtomicBool>,
     blocs: [[f32; BLOC]; 4],
     musique_entrelacee: [f32; 2 * BLOC],
     musique_g: [f32; BLOC],
@@ -200,12 +199,6 @@ impl Moteur {
         let (se, ss) = self.table.sonde();
         self.sonde_e.push_slice(se);
         self.sonde_s.push_slice(ss);
-        if self.enregistrer.load(Ordering::Relaxed) {
-            for i in 0..BLOC {
-                let _ = self.enregistrement.try_push(self.sortie[0][i]);
-                let _ = self.enregistrement.try_push(self.sortie[1][i]);
-            }
-        }
         let latence = self.tampon_carte + self.micros[0].occupied_len() + self.table.retard(0);
         self.retour.write(Retour {
             cretes: self.table.cretes(),
@@ -277,13 +270,27 @@ impl Audio {
         let paquets: [Arc<AtomicUsize>; 2] = std::array::from_fn(|_| Arc::new(AtomicUsize::new(0)));
         let mut entrees = Vec::new();
         let mut micros = Vec::new();
+        let mut telephones = Vec::new();
+        let mut erreurs_micro: [Option<String>; 2] = [None, None];
         for (k, source) in [&choix.micro1, &choix.micro2].into_iter().enumerate() {
             let (prod, cons) = anneau(16_384);
             micros.push(cons);
             let device = match source {
                 SourceMicro::ParDefaut => host.default_input_device(),
                 SourceMicro::Peripherique(n) => Some(trouver(n, true)?),
-                SourceMicro::Aucun | SourceMicro::Telephone => None,
+                SourceMicro::Telephone => {
+                    // un téléphone absent ne coupe pas la table : l'erreur va dans la boîte de la voie
+                    let t = match (telephone::trouver_adb(), telephone::trouver_serveur()) {
+                        (Some(adb), Some(srv)) => Telephone::demarrer(&adb, &srv, prod, paquets[k].clone(), perdus[k].clone()),
+                        _ => Err("adb ou scrcpy-server introuvable".into()),
+                    };
+                    match t {
+                        Ok(t) => telephones.push(t),
+                        Err(e) => erreurs_micro[k] = Some(e),
+                    }
+                    continue;
+                }
+                SourceMicro::Aucun => None,
             };
             if let Some(d) = device {
                 entrees.push(ouvrir_entree(&d, prod, paquets[k].clone(), perdus[k].clone())?.flux);
@@ -296,8 +303,6 @@ impl Audio {
         let (sonde_s, sonde_sortie) = anneau(48_000);
         let (musique_p, musique_c) = anneau(16_384);
         let (voix_p, voix_c) = anneau(16_384);
-        let (rec_p, rec_c) = anneau(4 * 48_000);
-        let enregistrer = Arc::new(AtomicBool::new(false));
 
         let sc = choisir_config(sortie.supported_output_configs().map_err(|e| e.to_string())?, 2)?;
         if sc.sample_format() != SampleFormat::F32 {
@@ -317,8 +322,6 @@ impl Audio {
             voix: voix_c,
             sonde_e,
             sonde_s,
-            enregistrement: rec_p,
-            enregistrer: enregistrer.clone(),
             blocs: [[0.0; BLOC]; 4],
             musique_entrelacee: [0.0; 2 * BLOC],
             musique_g: [0.0; BLOC],
@@ -363,10 +366,9 @@ impl Audio {
             sonde_sortie,
             musique: LecteurMusique::new(musique_p),
             voix: Voix::new(voix_p),
-            enregistrement: rec_c,
-            enregistrer,
+            erreurs_micro,
         };
-        Ok((Audio { _sortie: flux, _entrees: entrees }, liens))
+        Ok((Audio { _sortie: flux, _entrees: entrees, _telephones: telephones }, liens))
     }
 }
 

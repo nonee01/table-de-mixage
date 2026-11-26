@@ -4,6 +4,7 @@ mod anneau;
 mod audio;
 mod sources;
 mod style;
+mod telephone;
 mod trace;
 mod ui;
 

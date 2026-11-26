@@ -222,6 +222,9 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
                     for n in &e.entrees {
                         ui.selectable_value(source, SourceMicro::Peripherique(n.clone()), n);
                     }
+                    if crate::telephone::trouver_adb().is_some() && crate::telephone::trouver_serveur().is_some() {
+                        ui.selectable_value(source, SourceMicro::Telephone, "Téléphone");
+                    }
                 });
             change = *source != avant;
         }
@@ -298,12 +301,14 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
     let erreur_source = match (&e.audio, i) {
         (Some((_, l)), 2) => l.musique.erreur(),
         (Some((_, l)), 3) => l.voix.erreur(),
+        (Some((_, l)), 0 | 1) => l.erreurs_micro[i].clone(),
         _ => None,
     };
     let etat = if let Some(err) = erreur_source {
         Some((err, style::ROUGE))
     } else if i < 2 && e.retour.perdu[i] {
-        Some(("Périphérique perdu".into(), style::ROUGE))
+        let tel = matches!(if i == 0 { &e.choix.micro1 } else { &e.choix.micro2 }, SourceMicro::Telephone);
+        Some((if tel { "Téléphone perdu" } else { "Périphérique perdu" }.into(), style::ROUGE))
     } else if i < 2
         && micro_ouvert(if i == 0 { &e.choix.micro1 } else { &e.choix.micro2 })
         && maintenant - e.dernier_signal[i] > 2.0
