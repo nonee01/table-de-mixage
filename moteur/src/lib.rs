@@ -1,6 +1,7 @@
 //! Traitement du son de la table de mixage : blocs de BLOC échantillons à FE Hz, sans OS ni fenêtre,
 //! pour pouvoir passer plus tard sur une carte.
 
+pub mod limiteur;
 pub mod niveau;
 
 /// Fréquence d'échantillonnage (Hz).
