@@ -10,3 +10,6 @@ path = "src/main.rs"
 [dependencies]
 moteur = { path = "../moteur" }
 eframe = "0.37"
+cpal = "0.18"
+ringbuf = "0.6"
+triple_buffer = "9"
