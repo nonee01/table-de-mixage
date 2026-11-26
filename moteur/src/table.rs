@@ -3,7 +3,7 @@
 use crate::generateur::{Generateur, TypeBruit};
 use crate::limiteur::Limiteur;
 use crate::niveau::{crete, db_vers_lin};
-use crate::voie::{ReglagesVoie, Voie};
+use crate::voie::{ReglagesVoie, Voie, VOLUME_MIN_DB};
 use crate::BLOC;
 
 /// 0 Micro 1, 1 Micro 2, 2 Musique, 3 Voix, 4 Bruit.
@@ -98,7 +98,7 @@ impl Table {
             }
         }
 
-        let g = db_vers_lin(r.master_db);
+        let g = if r.master_db <= VOLUME_MIN_DB { 0.0 } else { db_vers_lin(r.master_db) };
         for (k, sortie) in [sortie_g, sortie_d].into_iter().enumerate() {
             for v in sortie.iter_mut() {
                 *v = if v.is_finite() { *v * g } else { 0.0 };
@@ -188,6 +188,16 @@ mod tests {
             sortie.extend(un_bloc(&mut t, &r, b, &[0.0; BLOC]).0);
         }
         assert!((crete(&sortie) - 0.25).abs() < 0.0025, "crête {}", crete(&sortie));
+    }
+
+    #[test]
+    fn master_en_bas_de_course_coupe() {
+        let mut t = Table::new();
+        let mut r = tout_muet();
+        r.voies[0].muet = false;
+        r.master_db = crate::voie::VOLUME_MIN_DB;
+        let (g, d) = un_bloc(&mut t, &r, &sinus(440.0, 0.5, BLOC), &[0.0; BLOC]);
+        assert!(g.iter().chain(&d).all(|v| *v == 0.0));
     }
 
     #[test]

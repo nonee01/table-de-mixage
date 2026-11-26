@@ -12,6 +12,7 @@ use ringbuf::traits::{Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 use triple_buffer::TripleBuffer;
 
+use crate::sources::{LecteurMusique, Voix};
 use crate::anneau::{borner, catmull_rom, tirer_bloc, Reechantillonneur};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,9 +53,8 @@ pub struct LiensUi {
     pub retour: triple_buffer::Output<Retour>,
     pub sonde_entree: HeapCons<f32>,
     pub sonde_sortie: HeapCons<f32>,
-    /// Stéréo entrelacée à 48 kHz.
-    pub musique: HeapProd<f32>,
-    pub voix: HeapProd<f32>,
+    pub musique: LecteurMusique,
+    pub voix: Voix,
     /// Stéréo entrelacée de la sortie, quand `enregistrer` est vrai.
     pub enregistrement: HeapCons<f32>,
     pub enregistrer: Arc<AtomicBool>,
@@ -361,8 +361,8 @@ impl Audio {
             retour: retour_out,
             sonde_entree,
             sonde_sortie,
-            musique: musique_p,
-            voix: voix_p,
+            musique: LecteurMusique::new(musique_p),
+            voix: Voix::new(voix_p),
             enregistrement: rec_c,
             enregistrer,
         };

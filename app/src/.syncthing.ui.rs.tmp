@@ -4,6 +4,8 @@ use eframe::egui::{self, RichText, Ui};
 use moteur::generateur::TypeBruit;
 use moteur::table::{ReglagesTable, NB_VOIES};
 
+use std::path::PathBuf;
+
 use crate::audio::{self, Audio, ChoixAudio, LiensUi, Retour, SourceMicro};
 use crate::trace::Trace;
 use crate::style::{self, boite_groupe, curseur_db, texte_db, vumetre, DB_MAX, DB_MIN};
@@ -34,6 +36,9 @@ pub struct EtatUi {
     fenetre_reglages: bool,
     fenetre_aide: bool,
     trace: Trace,
+    musique: Option<PathBuf>,
+    boucle: bool,
+    texte_voix: String,
 }
 
 impl EtatUi {
@@ -52,16 +57,35 @@ impl EtatUi {
             fenetre_reglages: false,
             fenetre_aide: false,
             trace: Trace::new(),
+            musique: None,
+            boucle: false,
+            texte_voix: "Bonjour monsieur".into(),
         };
         e.redemarrer();
         e
     }
 
+    /// Ouvre un fichier de musique et le lance.
+    pub fn jouer(&mut self, chemin: PathBuf) {
+        if let Some((_, l)) = &self.audio {
+            l.musique.ouvrir(chemin.clone());
+            l.musique.lecture(true);
+        }
+        self.musique = Some(chemin);
+    }
+
     /// Rouvre les flux avec `choix` (changement de périphérique).
     pub fn redemarrer(&mut self) {
+        let jouait = self.audio.as_ref().is_some_and(|(_, l)| l.musique.en_lecture());
         self.audio = None; // l'ancien flux s'arrête avant d'ouvrir le nouveau
         match Audio::demarrer(&self.choix) {
             Ok(a) => {
+                // le lecteur est neuf : on lui redonne le morceau en cours
+                if let Some(c) = &self.musique {
+                    a.1.musique.ouvrir(c.clone());
+                }
+                a.1.musique.boucle(self.boucle);
+                a.1.musique.lecture(jouait);
                 self.audio = Some(a);
                 self.erreur = None;
             }
@@ -135,6 +159,10 @@ pub fn dessiner(ui: &mut Ui, e: &mut EtatUi) {
 
 fn menus(ui: &mut Ui, e: &mut EtatUi) {
     ui.menu_button("Fichier", |ui| {
+        if ui.button("Ouvrir une musique…").clicked() {
+            ouvrir_musique(e);
+            ui.close();
+        }
         if ui.button("Quitter").clicked() {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -161,6 +189,12 @@ fn menus(ui: &mut Ui, e: &mut EtatUi) {
         }
         ui.label("Table de mixage, TP de traitement du signal");
     });
+}
+
+fn ouvrir_musique(e: &mut EtatUi) {
+    if let Some(chemin) = rfd::FileDialog::new().add_filter("Musique", &["mp3", "wav", "flac"]).pick_file() {
+        e.jouer(chemin);
+    }
 }
 
 fn texte_source(s: &SourceMicro) -> String {
@@ -206,8 +240,36 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
                     ui.selectable_value(t, TypeBruit::Souffle, "Souffle");
                 });
         }
+        2 => {
+            let nom = e.musique.as_ref().and_then(|c| c.file_name()).map(|n| n.to_string_lossy().into_owned());
+            ui.horizontal(|ui| {
+                if ui.button("Ouvrir…").clicked() {
+                    ouvrir_musique(e);
+                }
+                ui.add(egui::Label::new(nom.unwrap_or_else(|| "aucun fichier".into())).truncate());
+            });
+            if let Some((_, l)) = &e.audio {
+                ui.horizontal(|ui| {
+                    let joue = l.musique.en_lecture();
+                    if ui.add_enabled(e.musique.is_some(), egui::Button::new(if joue { "Pause" } else { "Lecture" })).clicked() {
+                        l.musique.lecture(!joue);
+                    }
+                    if ui.checkbox(&mut e.boucle, "Boucle").changed() {
+                        l.musique.boucle(e.boucle);
+                    }
+                });
+            }
+        }
         _ => {
-            ui.label(RichText::new("bientôt").color(style::TEXTE_GRIS));
+            ui.horizontal(|ui| {
+                let champ = ui.add(egui::TextEdit::singleline(&mut e.texte_voix).desired_width(LARGEUR_BOITE - 46.0));
+                let entree = champ.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                if (ui.button("Dire").clicked() || entree) && !e.texte_voix.trim().is_empty() {
+                    if let Some((_, l)) = &e.audio {
+                        l.voix.dire(e.texte_voix.clone());
+                    }
+                }
+            });
         }
     }
 
@@ -233,15 +295,22 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
     ui.checkbox(&mut v.muet, "Muet");
 
     let micro_ouvert = |s: &SourceMicro| !matches!(s, SourceMicro::Aucun);
-    let etat = if i < 2 && e.retour.perdu[i] {
-        Some(("Périphérique perdu", style::ROUGE))
+    let erreur_source = match (&e.audio, i) {
+        (Some((_, l)), 2) => l.musique.erreur(),
+        (Some((_, l)), 3) => l.voix.erreur(),
+        _ => None,
+    };
+    let etat = if let Some(err) = erreur_source {
+        Some((err, style::ROUGE))
+    } else if i < 2 && e.retour.perdu[i] {
+        Some(("Périphérique perdu".into(), style::ROUGE))
     } else if i < 2
         && micro_ouvert(if i == 0 { &e.choix.micro1 } else { &e.choix.micro2 })
         && maintenant - e.dernier_signal[i] > 2.0
     {
-        Some(("Aucun signal, micro coupé ?", style::ROUGE))
+        Some(("Aucun signal, micro coupé ?".into(), style::ROUGE))
     } else if e.retour.coupe[i] {
-        Some(("Cri coupé", style::ROUGE))
+        Some(("Cri coupé".into(), style::ROUGE))
     } else {
         None
     };

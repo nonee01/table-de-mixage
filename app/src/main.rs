@@ -2,6 +2,7 @@
 
 mod anneau;
 mod audio;
+mod sources;
 mod style;
 mod trace;
 mod ui;
@@ -48,10 +49,15 @@ impl App {
         let mut reglages = ReglagesTable::default();
         // TABLE_DE_MIXAGE_DEBUG=muet : on mesure les entrées sans rien envoyer aux haut-parleurs
         if std::env::var("TABLE_DE_MIXAGE_DEBUG").as_deref() == Ok("muet") {
-            reglages.master_db = -120.0;
+            reglages.master_db = moteur::voie::VOLUME_MIN_DB;
+        }
+        let mut etat = ui::EtatUi::new(reglages);
+        // un fichier donné en argument (« Ouvrir avec » sous Windows) est lancé tout de suite
+        if let Some(chemin) = std::env::args_os().nth(1) {
+            etat.jouer(chemin.into());
         }
         App {
-            etat: ui::EtatUi::new(reglages),
+            etat,
             debug: std::env::var_os("TABLE_DE_MIXAGE_DEBUG").is_some(),
             dernier_debug: 0.0,
             capture: std::env::var("TABLE_DE_MIXAGE_CAPTURE").ok(),
