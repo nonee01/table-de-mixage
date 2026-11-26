@@ -402,7 +402,7 @@ impl Audio {
 mod tests {
     use super::*;
 
-    /// Appli « Micro table » démarrée : `TDM_TELEPHONE=<ip> cargo test -p table-de-mixage enregistrement_vrai -- --ignored`
+    /// Appli « Micro table » démarrée : `TDM_TELEPHONE="<ip> <code>" cargo test -p table-de-mixage enregistrement_vrai -- --ignored`
     #[test]
     #[ignore]
     fn enregistrement_vrai_du_telephone() {

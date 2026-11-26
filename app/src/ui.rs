@@ -283,7 +283,7 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
                 });
             if matches!(source, SourceMicro::TelephoneWifi(_)) {
                 // on ne se reconnecte qu'à Entrée, pas à chaque touche
-                let champ = ui.add(egui::TextEdit::singleline(&mut e.adresse_telephone).hint_text("192.168.x.x").desired_width(LARGEUR_BOITE - 8.0));
+                let champ = ui.add(egui::TextEdit::singleline(&mut e.adresse_telephone).hint_text("adresse code").desired_width(LARGEUR_BOITE - 8.0));
                 if champ.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                     *source = SourceMicro::TelephoneWifi(e.adresse_telephone.clone());
                 }

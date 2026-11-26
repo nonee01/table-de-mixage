@@ -19,6 +19,8 @@ pub const ERREUR_PORT: i32 = -2;
 static ETAT: AtomicI32 = AtomicI32::new(ARRETE);
 static ARRET: AtomicBool = AtomicBool::new(false);
 static EN_MARCHE: AtomicBool = AtomicBool::new(false);
+/// Code à 6 chiffres affiché sur le téléphone ; le PC l'envoie avant que le micro s'ouvre.
+static CODE: AtomicI32 = AtomicI32::new(0);
 /// Crête du dernier paquet envoyé, en millièmes de pleine échelle (pour le vumètre de l'appli).
 static CRETE: AtomicI32 = AtomicI32::new(0);
 
@@ -73,6 +75,25 @@ fn ouvrir_micro(mut prod: ringbuf::HeapProd<i16>) -> ndk::audio::Result<ndk::aud
     Ok(flux)
 }
 
+/// Un code neuf, tiré du générateur du noyau.
+fn nouveau_code() -> i32 {
+    use std::io::Read;
+    let mut o = [0u8; 4];
+    let _ = std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut o));
+    (u32::from_le_bytes(o) % 1_000_000) as i32
+}
+
+/// Lit les 6 chiffres du PC (2 s au plus) et les compare au code.
+pub fn code_correct(sock: &mut impl std::io::Read, code: i32) -> bool {
+    let mut recu = [0u8; 6];
+    if sock.read_exact(&mut recu).is_err() {
+        return false;
+    }
+    let attendu = format!("{code:06}");
+    // comparaison sans sortie anticipée
+    recu.iter().zip(attendu.as_bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0
+}
+
 fn servir(port: u16) {
     let ecoute = match TcpListener::bind(("0.0.0.0", port)) {
         Ok(e) => e,
@@ -88,8 +109,14 @@ fn servir(port: u16) {
                 continue;
             }
         };
+        let mut sock = sock;
         let _ = sock.set_nonblocking(false);
         let _ = sock.set_nodelay(true);
+        let _ = sock.set_read_timeout(Some(Duration::from_secs(2)));
+        if !code_correct(&mut sock, CODE.load(Ordering::Relaxed)) {
+            std::thread::sleep(Duration::from_secs(1)); // deviner 10^6 codes prendrait des jours
+            continue;
+        }
         let (_prod, cons) = ringbuf::traits::Split::split(ringbuf::HeapRb::<i16>::new(48_000));
         #[cfg(target_os = "android")]
         let _flux = match ouvrir_micro(_prod) {
@@ -121,6 +148,7 @@ pub extern "system" fn Java_ma_tdm_micro_Micro_demarrer(_: Jni, _: Jni, port: i3
         return;
     }
     ARRET.store(false, Ordering::Relaxed);
+    CODE.store(nouveau_code(), Ordering::Relaxed);
     std::thread::spawn(move || servir(port as u16));
 }
 
@@ -135,6 +163,11 @@ pub extern "system" fn Java_ma_tdm_micro_Micro_etat(_: Jni, _: Jni) -> i32 {
 }
 
 #[no_mangle]
+pub extern "system" fn Java_ma_tdm_micro_Micro_code(_: Jni, _: Jni) -> i32 {
+    CODE.load(Ordering::Relaxed)
+}
+
+#[no_mangle]
 pub extern "system" fn Java_ma_tdm_micro_Micro_crete(_: Jni, _: Jni) -> i32 {
     CRETE.load(Ordering::Relaxed)
 }
@@ -144,6 +177,14 @@ mod tests {
     use super::*;
     use ringbuf::traits::{Producer, Split};
     use ringbuf::HeapRb;
+
+    #[test]
+    fn code_verifie() {
+        assert!(code_correct(&mut &b"004821"[..], 4821));
+        assert!(!code_correct(&mut &b"004822"[..], 4821));
+        assert!(!code_correct(&mut &b"0048"[..], 4821));
+        assert!((0..1_000_000).contains(&nouveau_code()));
+    }
 
     #[test]
     fn stereo_identique() {

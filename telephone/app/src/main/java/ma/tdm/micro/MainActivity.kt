@@ -40,7 +40,7 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.WHITE)
             setPadding(p, p, p, p)
             addView(TextView(this@MainActivity).apply {
-                text = "Dans la table de mixage, Micro 1 ou 2 → Téléphone (Wi-Fi), puis tapez :"
+                text = "Dans la table de mixage, Micro 1 ou 2 → Téléphone (Wi-Fi), puis tapez l'adresse et le code :"
                 textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.DKGRAY)
             })
             addView(adresse)
@@ -76,7 +76,8 @@ class MainActivity : Activity() {
     private fun rafraichir() {
         val e = Micro.etat()
         val ips = adresses()
-        adresse.text = if (ips.isEmpty()) "Pas de réseau" else ips.joinToString("\n")
+        val code = if (e > 0) " %06d".format(Micro.code()) else ""
+        adresse.text = if (ips.isEmpty()) "Pas de réseau" else ips.joinToString("\n") { it + code }
         etat.text = when (e) {
             1 -> "En attente du PC (port $PORT)"
             2 -> "Connecté : le micro part vers la table"

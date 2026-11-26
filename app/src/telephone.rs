@@ -179,17 +179,29 @@ impl Telephone {
     }
 
     /// Se connecte à l'appli « Micro table » du téléphone par le Wi-Fi (le PC appelle : pas de pare-feu à ouvrir).
-    pub fn wifi(adresse: &str, prod: HeapProd<f32>, paquet: Arc<AtomicUsize>, perdu: Arc<AtomicBool>) -> Result<Telephone, String> {
+    /// `saisie` = « adresse code », tels qu'affichés sur le téléphone.
+    pub fn wifi(saisie: &str, prod: HeapProd<f32>, paquet: Arc<AtomicUsize>, perdu: Arc<AtomicBool>) -> Result<Telephone, String> {
         use std::net::ToSocketAddrs;
-        let adresse = adresse.trim();
-        if adresse.is_empty() {
-            return Err("Tapez l'adresse affichée sur le téléphone".into());
+        use std::io::Write;
+        let mut mots = saisie.split_whitespace();
+        let (Some(adresse), Some(code)) = (mots.next(), mots.next()) else {
+            return Err("Tapez l'adresse et le code affichés sur le téléphone".into());
+        };
+        if code.len() != 6 || !code.bytes().all(|c| c.is_ascii_digit()) {
+            return Err("Le code a 6 chiffres".into());
         }
         let cible = if adresse.contains(':') { adresse.to_string() } else { format!("{adresse}:{PORT_APPLI}") };
         let sa = cible.to_socket_addrs().ok().and_then(|mut it| it.next()).ok_or("Adresse illisible")?;
         let socket = TcpStream::connect_timeout(&sa, Duration::from_secs(3))
             .map_err(|_| "Téléphone injoignable : appli démarrée, même Wi-Fi ?".to_string())?;
         let _ = socket.set_nodelay(true);
+        (&socket).write_all(code.as_bytes()).map_err(|e| e.to_string())?;
+        // un mauvais code : le téléphone raccroche sans rien envoyer
+        let _ = socket.set_read_timeout(Some(Duration::from_secs(3)));
+        if !matches!(socket.peek(&mut [0u8; 1]), Ok(n) if n > 0) {
+            return Err("Code refusé par le téléphone".into());
+        }
+        let _ = socket.set_read_timeout(None);
         let lecteur = socket.try_clone().map_err(|e| e.to_string())?;
         std::thread::spawn(move || lire(lecteur, prod, paquet, perdu));
         Ok(Telephone { usb: None, socket })
@@ -244,7 +256,7 @@ mod tests {
         assert!(!adb_sortie(&adb, &["forward", "--list"]).unwrap().contains(&format!("tcp:{port}")));
     }
 
-    /// Appli « Micro table » démarrée : `TDM_TELEPHONE=<ip> cargo test -p table-de-mixage telephone_wifi_vrai -- --ignored`
+    /// Appli « Micro table » démarrée : `TDM_TELEPHONE="<ip> <code>" cargo test -p table-de-mixage telephone_wifi_vrai -- --ignored`
     #[test]
     #[ignore]
     fn telephone_wifi_vrai() {
@@ -267,13 +279,16 @@ mod tests {
         let ecoute = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let adresse = ecoute.local_addr().unwrap().to_string();
         std::thread::spawn(move || {
-            use std::io::Write;
+            use std::io::{Read, Write};
             let (mut s, _) = ecoute.accept().unwrap();
+            let mut code = [0u8; 6];
+            s.read_exact(&mut code).unwrap();
+            assert_eq!(&code, b"012345");
             s.write_all(&[0u8; 4 * 480]).unwrap();
         });
         let (prod, cons) = HeapRb::<f32>::new(4096).split();
         let perdu = Arc::new(AtomicBool::new(false));
-        let t = Telephone::wifi(&adresse, prod, Default::default(), perdu.clone()).unwrap();
+        let t = Telephone::wifi(&format!("{adresse} 012345"), prod, Default::default(), perdu.clone()).unwrap();
         let limite = Instant::now() + Duration::from_secs(1);
         while !perdu.load(Ordering::Relaxed) && Instant::now() < limite {
             std::thread::sleep(Duration::from_millis(10));
@@ -281,7 +296,9 @@ mod tests {
         assert!(perdu.load(Ordering::Relaxed));
         assert_eq!(cons.occupied_len(), 480);
         drop(t);
-        assert!(Telephone::wifi("", HeapRb::<f32>::new(4).split().0, Default::default(), Default::default()).is_err());
+        for mauvais in ["", "127.0.0.1", "127.0.0.1 12a456"] {
+            assert!(Telephone::wifi(mauvais, HeapRb::<f32>::new(4).split().0, Default::default(), Default::default()).is_err());
+        }
     }
 
     #[test]
