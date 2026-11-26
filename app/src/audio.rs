@@ -56,6 +56,9 @@ pub struct LiensUi {
     pub retour: triple_buffer::Output<Retour>,
     pub sonde_entree: HeapCons<f32>,
     pub sonde_sortie: HeapCons<f32>,
+    /// La voie sondée, paires (avant, après) ses blocs, quand `enregistrer` est vrai ; prise par l'enregistrement en cours.
+    pub enregistrement: Option<HeapCons<f32>>,
+    pub enregistrer: Arc<AtomicBool>,
     pub musique: LecteurMusique,
     pub voix: Voix,
     /// Micro 1, Micro 2 : pourquoi la source choisie n'a pas pu s'ouvrir (téléphone).
@@ -166,6 +169,8 @@ struct Moteur {
     voix: HeapCons<f32>,
     sonde_e: HeapProd<f32>,
     sonde_s: HeapProd<f32>,
+    enregistrement: HeapProd<f32>,
+    enregistrer: Arc<AtomicBool>,
     blocs: [[f32; BLOC]; 4],
     musique_entrelacee: [f32; 2 * BLOC],
     musique_g: [f32; BLOC],
@@ -201,6 +206,12 @@ impl Moteur {
         let (se, ss) = self.table.sonde();
         self.sonde_e.push_slice(se);
         self.sonde_s.push_slice(ss);
+        if self.enregistrer.load(Ordering::Relaxed) {
+            for (a, b) in se.iter().zip(ss) {
+                let _ = self.enregistrement.try_push(*a);
+                let _ = self.enregistrement.try_push(*b);
+            }
+        }
         let latence = self.tampon_carte + self.micros[0].occupied_len() + self.table.retard(0);
         self.retour.write(Retour {
             cretes: self.table.cretes(),
@@ -310,6 +321,8 @@ impl Audio {
         let (retour_in, retour_out) = TripleBuffer::new(&Retour::default()).split();
         let (sonde_e, sonde_entree) = anneau(48_000);
         let (sonde_s, sonde_sortie) = anneau(48_000);
+        let (rec_p, rec_c) = anneau(4 * 48_000);
+        let enregistrer = Arc::new(AtomicBool::new(false));
         let (musique_p, musique_c) = anneau(16_384);
         let (voix_p, voix_c) = anneau(16_384);
 
@@ -331,6 +344,8 @@ impl Audio {
             voix: voix_c,
             sonde_e,
             sonde_s,
+            enregistrement: rec_p,
+            enregistrer: enregistrer.clone(),
             blocs: [[0.0; BLOC]; 4],
             musique_entrelacee: [0.0; 2 * BLOC],
             musique_g: [0.0; BLOC],
@@ -373,6 +388,8 @@ impl Audio {
             retour: retour_out,
             sonde_entree,
             sonde_sortie,
+            enregistrement: Some(rec_c),
+            enregistrer,
             musique: LecteurMusique::new(musique_p),
             voix: Voix::new(voix_p),
             erreurs_micro,
@@ -384,6 +401,32 @@ impl Audio {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Appli « Micro table » démarrée : `TDM_TELEPHONE=<ip> cargo test -p table-de-mixage enregistrement_vrai -- --ignored`
+    #[test]
+    #[ignore]
+    fn enregistrement_vrai_du_telephone() {
+        let choix = ChoixAudio { sortie: None, micro1: SourceMicro::TelephoneWifi(std::env::var("TDM_TELEPHONE").unwrap()), micro2: SourceMicro::Aucun };
+        let (_audio, mut l) = Audio::demarrer(&choix).unwrap();
+        assert_eq!(l.erreurs_micro[0], None);
+        let mut r = ReglagesTable::default();
+        r.master_db = moteur::voie::VOLUME_MIN_DB; // rien aux haut-parleurs
+        l.reglages.write(r);
+        let base = std::env::temp_dir().join(format!("tdm-vrai-{}.wav", std::process::id()));
+        let rec = crate::enregistrement::Enregistrement::demarrer(&base, l.enregistrement.take().unwrap()).map_err(|e| e.1).unwrap();
+        l.enregistrer.store(true, Ordering::Relaxed);
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        l.enregistrer.store(false, Ordering::Relaxed);
+        rec.arreter().1.unwrap();
+        let (a, b) = crate::enregistrement::chemins(&base);
+        for p in [&a, &b] {
+            let v: Vec<i16> = hound::WavReader::open(p).unwrap().into_samples().map(|s| s.unwrap()).collect();
+            let crete = v.iter().map(|x| x.unsigned_abs()).max().unwrap_or(0);
+            eprintln!("{}: {:.2} s, crête {crete}", p.display(), v.len() as f32 / 48_000.0);
+            assert!(v.len() > 2 * 48_000, "{}", v.len());
+            std::fs::remove_file(p).unwrap();
+        }
+    }
 
     #[test]
     fn peripherique_inconnu_donne_une_erreur() {

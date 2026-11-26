@@ -2,6 +2,7 @@
 
 mod anneau;
 mod audio;
+mod enregistrement;
 mod sources;
 mod style;
 mod telephone;

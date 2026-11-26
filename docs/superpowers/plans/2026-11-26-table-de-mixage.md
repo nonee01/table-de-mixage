@@ -314,9 +314,9 @@ Tests live in `#[cfg(test)] mod tests` at the bottom of each file. Shared test h
 - [ ] **Step 6:** Manual: play an MP3 under your voice; type `Bonjour monsieur` and press Dire; switch the Bruit type.
 - [ ] **Step 7:** Commit `app: musique, voix de synthèse, bruit de test`.
 
-### Task 11: Recording (dropped 2026-11-26)
+### Task 11: Recording (dropped, then brought back 2026-11-26)
 
-Dropped by the user: not in the demo's success test. The phone delay check in Task 12 uses the plot instead. The unused recording ring in `audio.rs` was removed.
+Done differently from the steps below, at the user's request: the « Enregistrer » button in the menu bar records the channel chosen for the plot, before its blocks and after them (before its volume), into `<nom>-avant.wav` and `<nom>-apres.wav` (48 kHz mono 16 bit), written as it goes by a thread (`app/src/enregistrement.rs`). Tests: `enregistrement_avant_et_apres`, and `enregistrement_vrai_du_telephone` (ignored, real phone).
 
 **Files:** Create `app/src/enregistreur.rs`; modify `app/src/ui.rs`
 
@@ -336,6 +336,8 @@ Dropped by the user: not in the demo's success test. The phone delay check in Ta
 - [ ] **Step 5:** Commit `app: enregistrement de la sortie`.
 
 ### Task 12: Phone microphone (the demo mic)
+
+Update 2026-11-26: the user wants the phone as an app. `telephone/` is the Android app « Micro table » (Rust AAudio core + Kotlin screen, `telephone/construire.sh`); the mixer's « Téléphone (Wi-Fi) » source connects to it (port 5005). The scrcpy USB source below stays as a fallback.
 
 Decided 2026-11-26: the Redmi over USB is the microphone for the demo, so this task is required and live (same delay bound as any mic). Built after Task 11, on the day in the schedule.
 

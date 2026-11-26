@@ -17,6 +17,6 @@ egui_plot = "0.38"
 realfft = "3.5"
 symphonia = { version = "0.6", default-features = false, features = ["mp3", "wav", "flac", "pcm"] }
 rfd = "0.18"
+hound = "3.5"
 
 [dev-dependencies]
-hound = "3.5"

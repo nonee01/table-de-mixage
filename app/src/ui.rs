@@ -5,8 +5,10 @@ use moteur::generateur::TypeBruit;
 use moteur::table::{ReglagesTable, NB_VOIES};
 
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 
 use crate::audio::{self, Audio, ChoixAudio, LiensUi, Retour, SourceMicro};
+use crate::enregistrement::Enregistrement;
 use crate::trace::Trace;
 use crate::style::{self, boite_groupe, curseur_db, texte_db, vumetre, DB_MAX, DB_MIN};
 
@@ -40,6 +42,7 @@ pub struct EtatUi {
     boucle: bool,
     texte_voix: String,
     adresse_telephone: String,
+    enregistrement: Option<Enregistrement>,
 }
 
 impl EtatUi {
@@ -62,6 +65,7 @@ impl EtatUi {
             boucle: false,
             texte_voix: "Bonjour monsieur".into(),
             adresse_telephone: String::new(),
+            enregistrement: None,
         };
         e.redemarrer();
         e
@@ -76,9 +80,41 @@ impl EtatUi {
         self.musique = Some(chemin);
     }
 
+    fn arreter_enregistrement(&mut self) {
+        let Some(r) = self.enregistrement.take() else { return };
+        let (cons, res) = r.arreter();
+        if let Some((_, l)) = &mut self.audio {
+            l.enregistrer.store(false, Ordering::Relaxed);
+            l.enregistrement = Some(cons);
+        }
+        if let Err(x) = res {
+            self.erreur = Some(x);
+        }
+    }
+
+    fn demarrer_enregistrement(&mut self) {
+        let voie = NOMS[self.reglages.voie_sondee];
+        let Some((_, l)) = &mut self.audio else { return };
+        let Some(chemin) = rfd::FileDialog::new().set_file_name(format!("{voie}.wav")).add_filter("WAV", &["wav"]).save_file() else {
+            return;
+        };
+        let Some(cons) = l.enregistrement.take() else { return };
+        match Enregistrement::demarrer(&chemin, cons) {
+            Ok(r) => {
+                l.enregistrer.store(true, Ordering::Relaxed);
+                self.enregistrement = Some(r);
+            }
+            Err((cons, x)) => {
+                l.enregistrement = Some(cons);
+                self.erreur = Some(x);
+            }
+        }
+    }
+
     /// Rouvre les flux avec `choix` (changement de périphérique).
     pub fn redemarrer(&mut self) {
         let jouait = self.audio.as_ref().is_some_and(|(_, l)| l.musique.en_lecture());
+        self.arreter_enregistrement();
         self.audio = None; // l'ancien flux s'arrête avant d'ouvrir le nouveau
         match Audio::demarrer(&self.choix) {
             Ok(a) => {
@@ -117,6 +153,21 @@ pub fn dessiner(ui: &mut Ui, e: &mut EtatUi) {
     egui::Panel::top("menus").show(ui, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             menus(ui, e);
+            ui.separator();
+            // enregistre la voie choisie (titre cliqué) avant et après ses blocs : deux WAV
+            match &e.enregistrement {
+                Some(r) => {
+                    let texte = RichText::new(format!("● Arrêter l'enregistrement ({} s)", r.secondes())).color(style::ROUGE);
+                    if ui.button(texte).clicked() {
+                        e.arreter_enregistrement();
+                    }
+                }
+                None => {
+                    if ui.add_enabled(e.audio.is_some(), egui::Button::new("● Enregistrer")).on_hover_text("La voie choisie, avant et après ses blocs").clicked() {
+                        e.demarrer_enregistrement();
+                    }
+                }
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     RichText::new(format!("48 000 Hz · bloc 256 · latence {:.0} ms", e.retour.latence_ms))

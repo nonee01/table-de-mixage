@@ -68,7 +68,7 @@ class MainActivity : Activity() {
     /** Les adresses IPv4 du téléphone (Wi-Fi et partage de connexion). */
     private fun adresses(): List<String> =
         NetworkInterface.getNetworkInterfaces().toList()
-            .filter { it.isUp && !it.isLoopback }
+            .filter { it.isUp && !it.isLoopback && !it.isVirtual && !it.name.startsWith("tun") } // pas l'adresse d'un VPN
             .flatMap { it.inetAddresses.toList() }
             .filterIsInstance<Inet4Address>()
             .map { it.hostAddress ?: "" }
