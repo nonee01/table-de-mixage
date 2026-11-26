@@ -1,23 +1,71 @@
-# Construit la table de mixage sous Windows et publie le dossier « clé USB » en artefact.
+# Construit la table de mixage sous Windows, fait signer l'exe par SignPath (quand le projet y est accepté),
+# publie le dossier « clé USB » en artefact, et en Release sur une étiquette v*.
 name: Windows
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write # créer la Release
+  actions: read # SignPath lit l'artefact non signé
 
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      # renseignées dans Settings > Secrets and variables > Actions une fois le projet accepté par SignPath
+      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+
       - name: Tests du moteur
         run: cargo test -p moteur
+
       - name: Dossier clé USB
         shell: bash
         run: bash packaging/windows.sh
+
+      - name: Exe non signé
+        id: non-signe
+        if: env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe-non-signe
+          path: dist/Table de mixage/table-de-mixage.exe
+
+      - name: Signature SignPath
+        if: env.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: table-de-mixage
+          signing-policy-slug: ${{ startsWith(github.ref, 'refs/tags/v') && 'release-signing' || 'test-signing' }}
+          github-artifact-id: ${{ steps.non-signe.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist/signe
+
+      - name: Remettre l'exe signé dans le dossier
+        if: env.SIGNPATH_ORGANIZATION_ID != ''
+        shell: bash
+        run: |
+          cp dist/signe/table-de-mixage.exe "dist/Table de mixage/table-de-mixage.exe"
+          rm -f dist/Table-de-mixage-windows.zip
+          (cd dist && python -m zipfile -c Table-de-mixage-windows.zip "Table de mixage")
+
       - uses: actions/upload-artifact@v4
         with:
           name: Table-de-mixage-windows
           path: dist/Table de mixage/
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/Table-de-mixage-windows.zip --title "Table de mixage $GITHUB_REF_NAME" --notes-file packaging/LISEZMOI.txt
