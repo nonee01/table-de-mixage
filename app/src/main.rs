@@ -3,6 +3,7 @@
 mod anneau;
 mod audio;
 mod style;
+mod trace;
 mod ui;
 
 use eframe::egui;

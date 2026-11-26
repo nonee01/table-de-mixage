@@ -1,10 +1,11 @@
 //! La fenêtre : menus, une boîte par voie, la boîte Sortie, la ligne d'état.
 
-use eframe::egui::{self, Color32, RichText, Ui};
+use eframe::egui::{self, RichText, Ui};
 use moteur::generateur::TypeBruit;
 use moteur::table::{ReglagesTable, NB_VOIES};
 
 use crate::audio::{self, Audio, ChoixAudio, LiensUi, Retour, SourceMicro};
+use crate::trace::Trace;
 use crate::style::{self, boite_groupe, curseur_db, texte_db, vumetre, DB_MAX, DB_MIN};
 
 const NOMS: [&str; NB_VOIES] = ["Micro 1", "Micro 2", "Musique", "Voix", "Bruit"];
@@ -32,6 +33,7 @@ pub struct EtatUi {
     sorties: Vec<String>,
     fenetre_reglages: bool,
     fenetre_aide: bool,
+    trace: Trace,
 }
 
 impl EtatUi {
@@ -49,6 +51,7 @@ impl EtatUi {
             sorties: audio::lister_sorties(),
             fenetre_reglages: false,
             fenetre_aide: false,
+            trace: Trace::new(),
         };
         e.redemarrer();
         e
@@ -72,6 +75,7 @@ pub fn dessiner(ui: &mut Ui, e: &mut EtatUi) {
     if let Some((_, liens)) = &mut e.audio {
         liens.reglages.write(e.reglages);
         e.retour = *liens.retour.read();
+        e.trace.alimenter(&mut liens.sonde_entree, &mut liens.sonde_sortie);
     }
     let niveaux: Vec<f32> = e.retour.cretes.iter().chain(&e.retour.master).copied().collect();
     for (a, n) in e.affiches.iter_mut().zip(niveaux) {
@@ -116,10 +120,10 @@ pub fn dessiner(ui: &mut Ui, e: &mut EtatUi) {
             });
         });
         ui.add_space(8.0);
-        // le tracé vient ici
-        let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
-        ui.painter().rect_filled(rect, 0.0, Color32::WHITE);
-        ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(1.0, style::BORDURE), egui::StrokeKind::Inside);
+        let v = &e.reglages.voies[e.reglages.voie_sondee];
+        let s = v.limiteur.then_some(v.seuil_limiteur_db);
+        let t = v.coupe_cri.then_some(v.seuil_cri_db);
+        e.trace.afficher(ui, e.vue, s, t);
     });
 
     fenetres(ui, e);

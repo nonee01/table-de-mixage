@@ -7,8 +7,8 @@ use eframe::egui::{
 
 pub const FOND: Color32 = Color32::from_rgb(0xf0, 0xf0, 0xf0);
 pub const BORDURE: Color32 = Color32::from_rgb(0xc8, 0xc8, 0xc8);
-pub const BORDURE_CHOISIE: Color32 = Color32::from_rgb(0x70, 0x70, 0x70);
 pub const GRILLE: Color32 = Color32::from_rgb(0xe6, 0xe6, 0xe6);
+pub const BORDURE_CHOISIE: Color32 = Color32::from_rgb(0x70, 0x70, 0x70);
 pub const ENTREE: Color32 = Color32::from_rgb(0x1f, 0x77, 0xb4);
 pub const SORTIE: Color32 = Color32::from_rgb(0xff, 0x7f, 0x0e);
 pub const TEXTE_GRIS: Color32 = Color32::from_rgb(0x44, 0x44, 0x44);

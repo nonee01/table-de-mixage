@@ -7,8 +7,8 @@ use eframe::egui::{
 
 pub const FOND: Color32 = Color32::from_rgb(0xf0, 0xf0, 0xf0);
 pub const BORDURE: Color32 = Color32::from_rgb(0xc8, 0xc8, 0xc8);
-pub const BORDURE_CHOISIE: Color32 = Color32::from_rgb(0x70, 0x70, 0x70);
 pub const GRILLE: Color32 = Color32::from_rgb(0xe6, 0xe6, 0xe6);
+pub const BORDURE_CHOISIE: Color32 = Color32::from_rgb(0x70, 0x70, 0x70);
 pub const ENTREE: Color32 = Color32::from_rgb(0x1f, 0x77, 0xb4);
 pub const SORTIE: Color32 = Color32::from_rgb(0xff, 0x7f, 0x0e);
 pub const TEXTE_GRIS: Color32 = Color32::from_rgb(0x44, 0x44, 0x44);
@@ -97,7 +97,7 @@ pub fn boite_groupe(ui: &mut Ui, titre: &str, choisie: bool, largeur: f32, conte
     let fond = Rect::from_min_size(pos2(rect.left() + 6.0, rect.top() - galee.size().y / 2.0), galee.size() + vec2(6.0, 0.0));
     ui.painter().rect_filled(fond, 0.0, FOND);
     ui.painter().galley(fond.min + vec2(3.0, 0.0), galee, Color32::BLACK);
-    ui.interact(rect, ui.id().with(titre), Sense::click())
+    ui.interact(rect, ui.scope_id().with(titre), Sense::click())
 }
 
 fn fraction_db(db: f32) -> f32 {
