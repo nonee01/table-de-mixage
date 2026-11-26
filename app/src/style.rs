@@ -77,7 +77,7 @@ pub fn appliquer(ctx: &egui::Context) {
     });
 }
 
-/// Cadre de groupe Windows : bordure fine, titre posé dans le trait du haut. Cliquer dedans le choisit.
+/// Cadre de groupe Windows : bordure fine, titre posé dans le trait du haut. Cliquer le titre le choisit.
 pub fn boite_groupe(ui: &mut Ui, titre: &str, choisie: bool, largeur: f32, contenu: impl FnOnce(&mut Ui)) -> Response {
     ui.add_space(6.0);
     let trait_ = Stroke::new(1.0, if choisie { BORDURE_CHOISIE } else { BORDURE });
@@ -97,7 +97,8 @@ pub fn boite_groupe(ui: &mut Ui, titre: &str, choisie: bool, largeur: f32, conte
     let fond = Rect::from_min_size(pos2(rect.left() + 6.0, rect.top() - galee.size().y / 2.0), galee.size() + vec2(6.0, 0.0));
     ui.painter().rect_filled(fond, 0.0, FOND);
     ui.painter().galley(fond.min + vec2(3.0, 0.0), galee, Color32::BLACK);
-    ui.interact(rect, ui.scope_id().with(titre), Sense::click())
+    // seulement le titre : posée sur tout le cadre, la zone passerait au-dessus des commandes et prendrait leurs clics
+    ui.interact(fond, ui.scope_id().with(titre), Sense::click())
 }
 
 fn fraction_db(db: f32) -> f32 {

@@ -39,6 +39,7 @@ pub struct EtatUi {
     musique: Option<PathBuf>,
     boucle: bool,
     texte_voix: String,
+    adresse_telephone: String,
 }
 
 impl EtatUi {
@@ -60,6 +61,7 @@ impl EtatUi {
             musique: None,
             boucle: false,
             texte_voix: "Bonjour monsieur".into(),
+            adresse_telephone: String::new(),
         };
         e.redemarrer();
         e
@@ -202,7 +204,8 @@ fn texte_source(s: &SourceMicro) -> String {
         SourceMicro::Aucun => "Aucun".into(),
         SourceMicro::ParDefaut => "Micro par défaut".into(),
         SourceMicro::Peripherique(n) => n.clone(),
-        SourceMicro::Telephone => "Téléphone".into(),
+        SourceMicro::Telephone => "Téléphone (USB)".into(),
+        SourceMicro::TelephoneWifi(_) => "Téléphone (Wi-Fi)".into(),
     }
 }
 
@@ -222,10 +225,18 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
                     for n in &e.entrees {
                         ui.selectable_value(source, SourceMicro::Peripherique(n.clone()), n);
                     }
+                    ui.selectable_value(source, SourceMicro::TelephoneWifi(e.adresse_telephone.clone()), "Téléphone (Wi-Fi)");
                     if crate::telephone::trouver_adb().is_some() && crate::telephone::trouver_serveur().is_some() {
-                        ui.selectable_value(source, SourceMicro::Telephone, "Téléphone");
+                        ui.selectable_value(source, SourceMicro::Telephone, "Téléphone (USB)");
                     }
                 });
+            if matches!(source, SourceMicro::TelephoneWifi(_)) {
+                // on ne se reconnecte qu'à Entrée, pas à chaque touche
+                let champ = ui.add(egui::TextEdit::singleline(&mut e.adresse_telephone).hint_text("192.168.x.x").desired_width(LARGEUR_BOITE - 8.0));
+                if champ.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    *source = SourceMicro::TelephoneWifi(e.adresse_telephone.clone());
+                }
+            }
             change = *source != avant;
         }
         4 => {
@@ -307,7 +318,7 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
     let etat = if let Some(err) = erreur_source {
         Some((err, style::ROUGE))
     } else if i < 2 && e.retour.perdu[i] {
-        let tel = matches!(if i == 0 { &e.choix.micro1 } else { &e.choix.micro2 }, SourceMicro::Telephone);
+        let tel = matches!(if i == 0 { &e.choix.micro1 } else { &e.choix.micro2 }, SourceMicro::Telephone | SourceMicro::TelephoneWifi(_));
         Some((if tel { "Téléphone perdu" } else { "Périphérique perdu" }.into(), style::ROUGE))
     } else if i < 2
         && micro_ouvert(if i == 0 { &e.choix.micro1 } else { &e.choix.micro2 })

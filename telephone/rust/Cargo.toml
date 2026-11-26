@@ -1,0 +1,21 @@
+[package]
+name = "micro-telephone"
+version = "0.1.0"
+edition = "2021"
+
+# pas dans l'espace de travail de la table : ce crate ne se construit que pour Android
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ringbuf = "0.6"
+
+[target.'cfg(target_os = "android")'.dependencies]
+ndk = { version = "0.9", default-features = false, features = ["audio", "api-level-28"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+panic = "abort"

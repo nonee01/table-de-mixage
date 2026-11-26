@@ -22,6 +22,8 @@ pub enum SourceMicro {
     ParDefaut,
     Peripherique(String),
     Telephone,
+    /// L'appli « Micro table » à cette adresse (IP du téléphone, port 5005 par défaut).
+    TelephoneWifi(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -285,6 +287,13 @@ impl Audio {
                         _ => Err("adb ou scrcpy-server introuvable".into()),
                     };
                     match t {
+                        Ok(t) => telephones.push(t),
+                        Err(e) => erreurs_micro[k] = Some(e),
+                    }
+                    continue;
+                }
+                SourceMicro::TelephoneWifi(adresse) => {
+                    match Telephone::wifi(adresse, prod, paquets[k].clone(), perdus[k].clone()) {
                         Ok(t) => telephones.push(t),
                         Err(e) => erreurs_micro[k] = Some(e),
                     }

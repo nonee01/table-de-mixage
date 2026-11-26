@@ -113,11 +113,12 @@ fn lire(mut flux: impl Read, mut prod: HeapProd<f32>, paquet: Arc<AtomicUsize>, 
     perdu.store(true, Ordering::Relaxed);
 }
 
+/// Port de l'appli « Micro table » (telephone/ dans ce dépôt).
+pub const PORT_APPLI: u16 = 5005;
+
 pub struct Telephone {
-    adb: PathBuf,
-    serie: String,
-    port: String,
-    serveur: Child,
+    /// adb, numéro de série, port local, serveur scrcpy : seulement par USB.
+    usb: Option<(PathBuf, String, String, Child)>,
     socket: TcpStream,
 }
 
@@ -174,15 +175,34 @@ impl Telephone {
         };
         let lecteur = socket.try_clone().map_err(|e| e.to_string())?;
         std::thread::spawn(move || lire(lecteur, prod, paquet, perdu));
-        Ok(Telephone { adb: adb.to_path_buf(), serie, port, serveur, socket })
+        Ok(Telephone { usb: Some((adb.to_path_buf(), serie, port, serveur)), socket })
+    }
+
+    /// Se connecte à l'appli « Micro table » du téléphone par le Wi-Fi (le PC appelle : pas de pare-feu à ouvrir).
+    pub fn wifi(adresse: &str, prod: HeapProd<f32>, paquet: Arc<AtomicUsize>, perdu: Arc<AtomicBool>) -> Result<Telephone, String> {
+        use std::net::ToSocketAddrs;
+        let adresse = adresse.trim();
+        if adresse.is_empty() {
+            return Err("Tapez l'adresse affichée sur le téléphone".into());
+        }
+        let cible = if adresse.contains(':') { adresse.to_string() } else { format!("{adresse}:{PORT_APPLI}") };
+        let sa = cible.to_socket_addrs().ok().and_then(|mut it| it.next()).ok_or("Adresse illisible")?;
+        let socket = TcpStream::connect_timeout(&sa, Duration::from_secs(3))
+            .map_err(|_| "Téléphone injoignable : appli démarrée, même Wi-Fi ?".to_string())?;
+        let _ = socket.set_nodelay(true);
+        let lecteur = socket.try_clone().map_err(|e| e.to_string())?;
+        std::thread::spawn(move || lire(lecteur, prod, paquet, perdu));
+        Ok(Telephone { usb: None, socket })
     }
 }
 
 impl Drop for Telephone {
     fn drop(&mut self) {
         let _ = self.socket.shutdown(Shutdown::Both); // le serveur s'arrête quand sa socket se ferme
-        let _ = self.serveur.kill();
-        let _ = adb_sortie(&self.adb, &["-s", &self.serie, "forward", "--remove", &format!("tcp:{}", self.port)]);
+        if let Some((adb, serie, port, serveur)) = &mut self.usb {
+            let _ = serveur.kill();
+            let _ = adb_sortie(adb, &["-s", serie, "forward", "--remove", &format!("tcp:{port}")]);
+        }
     }
 }
 
@@ -217,11 +237,51 @@ mod tests {
         assert!(ouvert < Duration::from_secs(5));
         assert!((90_000..=100_000).contains(&n), "{n}");
         assert!(!perdu.load(Ordering::Relaxed));
-        let port = t.port.clone();
+        let port = t.usb.as_ref().unwrap().2.clone();
         drop(t);
         std::thread::sleep(Duration::from_millis(500));
         assert!(perdu.load(Ordering::Relaxed));
         assert!(!adb_sortie(&adb, &["forward", "--list"]).unwrap().contains(&format!("tcp:{port}")));
+    }
+
+    /// Appli « Micro table » démarrée : `TDM_TELEPHONE=<ip> cargo test -p table-de-mixage telephone_wifi_vrai -- --ignored`
+    #[test]
+    #[ignore]
+    fn telephone_wifi_vrai() {
+        let (prod, cons) = HeapRb::<f32>::new(4 * 48_000).split();
+        let perdu = Arc::new(AtomicBool::new(false));
+        let t0 = Instant::now();
+        let t = Telephone::wifi(&std::env::var("TDM_TELEPHONE").unwrap(), prod, Default::default(), perdu.clone()).unwrap();
+        let ouvert = t0.elapsed();
+        std::thread::sleep(Duration::from_secs(2));
+        let n = cons.occupied_len();
+        eprintln!("ouvert en {ouvert:?}, {n} échantillons en 2 s");
+        assert!((75_000..=100_000).contains(&n), "{n}"); // le micro du téléphone s'ouvre à la connexion : ~200 ms de moins
+        assert!(!perdu.load(Ordering::Relaxed));
+        drop(t);
+    }
+
+    /// L'appli parle comme scrcpy : un faux téléphone local envoie 480 trames puis raccroche.
+    #[test]
+    fn telephone_wifi_recoit_puis_perdu() {
+        let ecoute = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let adresse = ecoute.local_addr().unwrap().to_string();
+        std::thread::spawn(move || {
+            use std::io::Write;
+            let (mut s, _) = ecoute.accept().unwrap();
+            s.write_all(&[0u8; 4 * 480]).unwrap();
+        });
+        let (prod, cons) = HeapRb::<f32>::new(4096).split();
+        let perdu = Arc::new(AtomicBool::new(false));
+        let t = Telephone::wifi(&adresse, prod, Default::default(), perdu.clone()).unwrap();
+        let limite = Instant::now() + Duration::from_secs(1);
+        while !perdu.load(Ordering::Relaxed) && Instant::now() < limite {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(perdu.load(Ordering::Relaxed));
+        assert_eq!(cons.occupied_len(), 480);
+        drop(t);
+        assert!(Telephone::wifi("", HeapRb::<f32>::new(4).split().0, Default::default(), Default::default()).is_err());
     }
 
     #[test]
