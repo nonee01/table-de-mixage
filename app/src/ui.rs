@@ -275,10 +275,17 @@ fn ouvrir_musique(e: &mut EtatUi) {
 
 /// Joue l'enregistrement intégré : voix Piper puis cri (CC0, UncleSigmund sur Freesound, via Wikimedia Commons).
 fn test_cri(e: &mut EtatUi) {
-    // le lecteur lit des fichiers : on dépose la copie intégrée dans le dossier temporaire
-    let chemin = std::env::temp_dir().join("Test cri.flac");
-    match std::fs::write(&chemin, include_bytes!("../assets/test-cri.flac")) {
-        Ok(()) => e.jouer(chemin),
+    // le lecteur lit des fichiers : la copie intégrée va dans le dossier de l'utilisateur, pas dans
+    // le /tmp partagé où un lien posé d'avance ferait écrire ailleurs
+    let ecrire = || -> std::io::Result<std::path::PathBuf> {
+        let d = crate::visite::dossier().ok_or(std::io::ErrorKind::NotFound)?;
+        std::fs::create_dir_all(&d)?;
+        let chemin = d.join("Test cri.flac");
+        std::fs::write(&chemin, include_bytes!("../assets/test-cri.flac"))?;
+        Ok(chemin)
+    };
+    match ecrire() {
+        Ok(chemin) => e.jouer(chemin),
         Err(err) => e.erreur = Some(format!("Test cri : {err}")),
     }
 }

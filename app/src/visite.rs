@@ -46,13 +46,18 @@ pub struct Visite {
     zones: HashMap<Zone, Rect>,
 }
 
-/// Fichier vide qui dit que la visite a déjà été vue sur ce PC.
-fn marque() -> Option<PathBuf> {
+/// Le dossier de la table dans les réglages de l'utilisateur, à lui seul (pas comme /tmp).
+pub fn dossier() -> Option<PathBuf> {
     let base = std::env::var_os("APPDATA")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("Table de mixage").join("visite-vue"))
+    Some(base.join("Table de mixage"))
+}
+
+/// Fichier vide qui dit que la visite a déjà été vue sur ce PC.
+fn marque() -> Option<PathBuf> {
+    Some(dossier()?.join("visite-vue"))
 }
 
 impl Visite {
