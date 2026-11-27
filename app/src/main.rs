@@ -8,6 +8,7 @@ mod style;
 mod telephone;
 mod trace;
 mod ui;
+mod visite;
 
 use eframe::egui;
 use moteur::table::ReglagesTable;
@@ -19,7 +20,10 @@ fn main() -> eframe::Result {
         std::env::set_var("WGPU_BACKEND", "dx12");
     }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_title("Table de mixage").with_inner_size([1060.0, 720.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Table de mixage")
+            .with_inner_size([1060.0, 720.0])
+            .with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../assets/icone.png")).expect("icône")),
         ..Default::default()
     };
     eframe::run_native(

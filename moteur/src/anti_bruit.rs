@@ -75,6 +75,11 @@ impl AntiBruit {
     }
 
     /// La seconde qui suit devient le profil du bruit.
+    /// Sous ce niveau le bloc baisse le son de 30 dB (la porte).
+    pub fn set_porte_db(&mut self, db: f32) {
+        self.porte_seuil = db_vers_lin(db);
+    }
+
     pub fn apprendre(&mut self) {
         self.somme_apprise.iter_mut().for_each(|v| *v = 0.0);
         self.trames_apprises = 0;

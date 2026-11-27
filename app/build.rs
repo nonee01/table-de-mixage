@@ -8,6 +8,7 @@ fn main() {
             .set("FileDescription", "Table de mixage du TP de traitement du signal")
             .set("CompanyName", "nonee01")
             .set("LegalCopyright", "MIT, nonee01");
+        res.set_icon("assets/icone.ico"); // icône de l'exe dans l'Explorateur et les raccourcis
         res.compile().expect("ressources Windows");
     }
 }

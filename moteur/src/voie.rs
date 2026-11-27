@@ -18,6 +18,9 @@ pub struct ReglagesVoie {
     pub aigus_db: f32,
     pub seuil_limiteur_db: f32,
     pub seuil_cri_db: f32,
+    pub porte_db: f32,
+    pub reaction_cri_ms: f32,
+    pub relache_ms: f32,
     /// Compteur : chaque changement lance « Apprendre le bruit ».
     pub apprendre: u32,
 }
@@ -35,6 +38,9 @@ impl Default for ReglagesVoie {
             aigus_db: 0.0,
             seuil_limiteur_db: -12.0,
             seuil_cri_db: -10.0,
+            porte_db: -50.0,
+            reaction_cri_ms: 5.0,
+            relache_ms: 150.0,
             apprendre: 0,
         }
     }
@@ -82,14 +88,17 @@ impl Voie {
         }
         self.actifs = [r.anti_bruit, r.coupe_cri, r.limiteur];
         if r.anti_bruit {
+            self.anti_bruit.set_porte_db(r.porte_db);
             self.anti_bruit.traiter(x);
         }
         if r.coupe_cri {
             self.coupe_cri.set_seuil_db(r.seuil_cri_db);
+            self.coupe_cri.set_reaction_ms(r.reaction_cri_ms);
             self.coupe_cri.traiter(x);
         }
         if r.limiteur {
             self.limiteur.set_seuil_db(r.seuil_limiteur_db);
+            self.limiteur.set_relache_ms(r.relache_ms);
             self.limiteur.traiter(x);
         }
         let gains = [r.graves_db, r.mediums_db, r.aigus_db];

@@ -15,7 +15,7 @@ ringbuf = "0.6"
 triple_buffer = "9"
 egui_plot = "0.38"
 realfft = "3.5"
-symphonia = { version = "0.6", default-features = false, features = ["mp3", "wav", "flac", "pcm"] }
+symphonia = { version = "0.6", default-features = false, features = ["mp3", "wav", "flac", "pcm", "isomp4", "aac"] }
 rfd = "0.18"
 hound = "3.5"
 

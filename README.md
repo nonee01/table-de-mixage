@@ -39,4 +39,4 @@ The only network use is the phone microphone: when the user types a phone's addr
 
 ## Licence
 
-MIT, voir [LICENSE](LICENSE). Composants inclus dans le zip Windows : [Piper](https://github.com/rhasspy/piper) (MIT), espeak-ng (GPL-3.0), voix [fr_FR-siwis-medium](https://huggingface.co/rhasspy/piper-voices).
+MIT, voir [LICENSE](LICENSE). Composants inclus dans le zip Windows : [Piper](https://github.com/rhasspy/piper) (MIT), espeak-ng (GPL-3.0), voix [fr_FR-siwis-medium](https://huggingface.co/rhasspy/piper-voices). Le « Test cri » (`app/assets/test-cri.flac`) : une phrase dite par cette voix, puis le cri « ahhh » de UncleSigmund sur Freesound, domaine public (CC0), [via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:UncleSigmund_-_ahhh_(cc0)_(freesound).mp3).

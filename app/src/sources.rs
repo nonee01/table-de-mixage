@@ -349,6 +349,34 @@ mod tests {
     }
 
     #[test]
+    fn test_cri_parole_passe_cri_coupe() {
+        let (g, _) = decoder_fichier(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/test-cri.flac"))).unwrap();
+        assert!((g.len() as f32 / 48_000.0 - 7.84).abs() < 0.1, "{} échantillons", g.len());
+        let mut y = g.clone();
+        let mut c = moteur::coupe_cri::CoupeCri::new(-10.0);
+        y.chunks_mut(256).for_each(|b| c.traiter(b));
+        let r = c.retard();
+        let crete = |x: &[f32]| x.iter().fold(0f32, |m, v| m.max(v.abs()));
+        let parole = 48_000 * 38 / 10; // la phrase dure 3,9 s, le cri commence à 4,3 s
+        let ecart = g[..parole].iter().zip(&y[r..parole + r]).fold(0f32, |m, (a, b)| m.max((a - b).abs()));
+        assert!(ecart < 1e-3, "la parole est modifiée de {ecart}");
+        // la montée du cri (~120 ms sous -10 dB efficaces) passe, puis la voie se tait
+        let (a, b) = (48_000 * 445 / 100, 48_000 * 49 / 10);
+        assert!(crete(&g[a..b]) > 0.9 && crete(&y[a + r..b + r]) < 0.01, "le cri n'est pas coupé");
+    }
+
+    /// Une vidéo mp4 (image H.264, son AAC 44,1 kHz, 1 s de la à 1 kHz) : on en garde le son.
+    #[test]
+    fn video_mp4_donne_son_son() {
+        let (g, _) = decoder_fichier(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/essai-video.mp4"))).unwrap();
+        assert!((g.len() as f32 / 48_000.0 - 1.0).abs() < 0.1, "{} échantillons", g.len());
+        let s = crate::trace::spectre_db(&g[4_800..4_800 + crate::trace::TF]);
+        let k = s.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).unwrap().0;
+        let f = k as f32 * moteur::FE / crate::trace::TF as f32;
+        assert!((f - 1000.0).abs() < 12.0, "pic à {f} Hz");
+    }
+
+    #[test]
     fn fichier_illisible_donne_erreur() {
         let chemin = dossier("mp3").join("faux.mp3");
         std::fs::write(&chemin, "ceci n'est pas de la musique").unwrap();

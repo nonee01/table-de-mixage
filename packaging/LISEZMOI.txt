@@ -4,6 +4,7 @@ TABLE DE MIXAGE - TP de traitement du signal
 DEMARRER
   Double-cliquez sur « Lancer la table de mixage.bat ».
   Rien a installer : tout est dans ce dossier (il peut rester sur la cle USB).
+  Au premier lancement, une visite guidee montre la table ; elle se relance par Aide > Visite guidee.
   Ecoutez au casque ou aux ecouteurs : micro + haut-parleurs du PC = effet Larsen.
 
 SI WINDOWS REFUSE DE LE LANCER
@@ -23,17 +24,21 @@ LE TELEPHONE COMME MICRO (Android 9 ou plus)
      activez le partage de connexion du telephone et connectez le PC dessus.
   3. Dans l'appli : Demarrer. Elle affiche une adresse et un code, par exemple
      192.168.11.119 120361
+     Avec le partage de connexion, l'adresse est la passerelle du PC.
   4. Dans la table : Micro 1 (ou 2) -> « Telephone (Wi-Fi) », tapez l'adresse et le code, Entree.
   Le code change a chaque Demarrer : seul ce PC peut ecouter le micro du telephone.
+  Les filtres de la voie du telephone se reglent aussi depuis l'appli.
 
 LA DEMONSTRATION
   1. Parlez dans le micro : la voix sort propre, le trace bouge.
   2. Criez avec seulement Limiteur coche : le cri sort au niveau de la voix (crete aplatie).
   3. Cochez Coupe-cri : le cri ne sort plus du tout, la parole passe toujours.
-  4. Demutez Bruit (50 Hz ou souffle) et cochez Anti-bruit : le bruit disparait, la voix reste.
+  4. Musique : « Test cri » joue une phrase puis un cri.
+     Cochez Coupe-cri sur Musique et rejouez : la phrase passe, le cri est coupe.
+  5. Demutez Bruit (50 Hz ou souffle) et cochez Anti-bruit : le bruit disparait, la voix reste.
      La vue Spectre (menu Affichage) montre la baisse.
-  5. Musique : Ouvrir..., Lecture. Voix : tapez une phrase, Dire.
-  6. Enregistrer : enregistre la voie choisie (cliquez son titre), avant et apres ses blocs,
+  6. Musique : Ouvrir... (mp3, wav, flac, mp4), Lecture. Voix : tapez une phrase, Dire.
+  7. Enregistrer : enregistre la voie choisie (cliquez son titre), avant et apres ses blocs,
      dans deux fichiers WAV a comparer.
 
 CONTENU

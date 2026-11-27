@@ -35,6 +35,10 @@ impl Limiteur {
         self.seuil = db_vers_lin(s);
     }
 
+    pub fn set_relache_ms(&mut self, ms: f32) {
+        self.relache = coef(ms.clamp(10.0, 2000.0) / 1000.0);
+    }
+
     pub fn retard(&self) -> usize {
         ANTICIPATION
     }

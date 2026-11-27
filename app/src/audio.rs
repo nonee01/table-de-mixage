@@ -63,6 +63,8 @@ pub struct LiensUi {
     pub voix: Voix,
     /// Micro 1, Micro 2 : pourquoi la source choisie n'a pas pu s'ouvrir (téléphone).
     pub erreurs_micro: [Option<String>; 2],
+    /// Micro 1, Micro 2 : le lien avec l'appli quand la source est le téléphone par le Wi-Fi.
+    pub telephones_wifi: [Option<telephone::LienWifi>; 2],
 }
 
 pub struct Audio {
@@ -295,6 +297,7 @@ impl Audio {
         let mut micros = Vec::new();
         let mut telephones = Vec::new();
         let mut erreurs_micro: [Option<String>; 2] = [None, None];
+        let mut telephones_wifi: [Option<telephone::LienWifi>; 2] = [None, None];
         for (k, source) in [&choix.micro1, &choix.micro2].into_iter().enumerate() {
             let (prod, cons) = anneau(16_384);
             micros.push(cons);
@@ -315,7 +318,10 @@ impl Audio {
                 }
                 SourceMicro::TelephoneWifi(adresse) => {
                     match Telephone::wifi(adresse, prod, paquets[k].clone(), perdus[k].clone()) {
-                        Ok(t) => telephones.push(t),
+                        Ok(mut t) => {
+                            telephones_wifi[k] = t.lien.take();
+                            telephones.push(t);
+                        }
                         Err(e) => erreurs_micro[k] = Some(e),
                     }
                     continue;
@@ -408,6 +414,7 @@ impl Audio {
             musique: LecteurMusique::new(musique_p),
             voix: Voix::new(voix_p),
             erreurs_micro,
+            telephones_wifi,
         };
         Ok((Audio { _sortie: flux, _entrees: entrees, _telephones: telephones }, liens))
     }

@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 use crate::audio::{self, Audio, ChoixAudio, LiensUi, Retour, SourceMicro};
 use crate::enregistrement::Enregistrement;
 use crate::trace::Trace;
+use crate::visite::{Visite, Zone};
 use crate::style::{self, boite_groupe, curseur_db, texte_db, vumetre, DB_MAX, DB_MIN};
 
 const NOMS: [&str; NB_VOIES] = ["Micro 1", "Micro 2", "Musique", "Voix", "Bruit"];
@@ -37,6 +38,7 @@ pub struct EtatUi {
     sorties: Vec<String>,
     fenetre_reglages: bool,
     fenetre_aide: bool,
+    visite: Visite,
     trace: Trace,
     musique: Option<PathBuf>,
     boucle: bool,
@@ -60,6 +62,7 @@ impl EtatUi {
             sorties: audio::lister_sorties(),
             fenetre_reglages: false,
             fenetre_aide: false,
+            visite: Visite::au_lancement(),
             trace: Trace::new(),
             musique: None,
             boucle: false,
@@ -135,6 +138,12 @@ impl EtatUi {
 pub fn dessiner(ui: &mut Ui, e: &mut EtatUi) {
     let maintenant = ui.input(|i| i.time);
     if let Some((_, liens)) = &mut e.audio {
+        // les switchs du téléphone et les cases du PC restent d'accord
+        for (k, l) in liens.telephones_wifi.iter_mut().enumerate() {
+            if let Some(l) = l {
+                l.synchroniser(&mut e.reglages.voies[k]);
+            }
+        }
         liens.reglages.write(e.reglages);
         e.retour = *liens.retour.read();
         e.trace.alimenter(&mut liens.sonde_entree, &mut liens.sonde_sortie);
@@ -158,12 +167,16 @@ pub fn dessiner(ui: &mut Ui, e: &mut EtatUi) {
             match &e.enregistrement {
                 Some(r) => {
                     let texte = RichText::new(format!("● Arrêter l'enregistrement ({} s)", r.secondes())).color(style::ROUGE);
-                    if ui.button(texte).clicked() {
+                    let b = ui.button(texte);
+                    e.visite.noter(Zone::Enregistrer, b.rect);
+                    if b.clicked() {
                         e.arreter_enregistrement();
                     }
                 }
                 None => {
-                    if ui.add_enabled(e.audio.is_some(), egui::Button::new("● Enregistrer")).on_hover_text("La voie choisie, avant et après ses blocs").clicked() {
+                    let b = ui.add_enabled(e.audio.is_some(), egui::Button::new("● Enregistrer")).on_hover_text("La voie choisie, avant et après ses blocs");
+                    e.visite.noter(Zone::Enregistrer, b.rect);
+                    if b.clicked() {
                         e.demarrer_enregistrement();
                     }
                 }
@@ -191,19 +204,25 @@ pub fn dessiner(ui: &mut Ui, e: &mut EtatUi) {
                 if r.clicked() {
                     e.reglages.voie_sondee = i;
                 }
+                if let Some(z) = [Some(Zone::Voie), None, Some(Zone::Musique), Some(Zone::Voix), Some(Zone::Bruit)][i] {
+                    e.visite.noter(z, r.rect);
+                }
             }
-            boite_groupe(ui, "Sortie", false, LARGEUR_BOITE, |ui| {
+            let sortie = boite_groupe(ui, "Sortie", false, LARGEUR_BOITE, |ui| {
                 redemarrer |= boite_sortie(ui, e);
             });
+            e.visite.noter(Zone::Sortie, sortie.rect);
         });
         ui.add_space(8.0);
         let v = &e.reglages.voies[e.reglages.voie_sondee];
         let s = v.limiteur.then_some(v.seuil_limiteur_db);
         let t = v.coupe_cri.then_some(v.seuil_cri_db);
-        e.trace.afficher(ui, e.vue, s, t);
+        let trace = ui.scope(|ui| e.trace.afficher(ui, e.vue, s, t)).response.rect;
+        e.visite.noter(Zone::Trace, trace);
     });
 
     fenetres(ui, e);
+    e.visite.afficher(ui.ctx());
     if redemarrer {
         e.redemarrer();
     }
@@ -236,7 +255,11 @@ fn menus(ui: &mut Ui, e: &mut EtatUi) {
         ui.radio_value(&mut e.vue, Vue::Spectre, "Spectre");
     });
     ui.menu_button("Aide", |ui| {
-        if ui.button("Les blocs").clicked() {
+        if ui.button("Visite guidée").clicked() {
+            e.visite.etape = Some(0);
+            ui.close();
+        }
+        if ui.button("Les blocs en formules").clicked() {
             e.fenetre_aide = true;
             ui.close();
         }
@@ -245,8 +268,18 @@ fn menus(ui: &mut Ui, e: &mut EtatUi) {
 }
 
 fn ouvrir_musique(e: &mut EtatUi) {
-    if let Some(chemin) = rfd::FileDialog::new().add_filter("Musique", &["mp3", "wav", "flac"]).pick_file() {
+    if let Some(chemin) = rfd::FileDialog::new().add_filter("Musique", &["mp3", "wav", "flac", "mp4", "m4a"]).pick_file() {
         e.jouer(chemin);
+    }
+}
+
+/// Joue l'enregistrement intégré : voix Piper puis cri (CC0, UncleSigmund sur Freesound, via Wikimedia Commons).
+fn test_cri(e: &mut EtatUi) {
+    // le lecteur lit des fichiers : on dépose la copie intégrée dans le dossier temporaire
+    let chemin = std::env::temp_dir().join("Test cri.flac");
+    match std::fs::write(&chemin, include_bytes!("../assets/test-cri.flac")) {
+        Ok(()) => e.jouer(chemin),
+        Err(err) => e.erreur = Some(format!("Test cri : {err}")),
     }
 }
 
@@ -267,7 +300,7 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
         0 | 1 => {
             let source = if i == 0 { &mut e.choix.micro1 } else { &mut e.choix.micro2 };
             let avant = source.clone();
-            egui::ComboBox::from_id_salt(("source", i))
+            let combo = egui::ComboBox::from_id_salt(("source", i))
                 .width(LARGEUR_BOITE - 8.0)
                 .selected_text(texte_source(source))
                 .show_ui(ui, |ui| {
@@ -281,6 +314,9 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
                         ui.selectable_value(source, SourceMicro::Telephone, "Téléphone (USB)");
                     }
                 });
+            if i == 0 {
+                e.visite.noter(Zone::Source, combo.response.rect);
+            }
             if matches!(source, SourceMicro::TelephoneWifi(_)) {
                 // on ne se reconnecte qu'à Entrée, pas à chaque touche
                 let champ = ui.add(egui::TextEdit::singleline(&mut e.adresse_telephone).hint_text("adresse code").desired_width(LARGEUR_BOITE - 8.0));
@@ -310,6 +346,9 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
             ui.horizontal(|ui| {
                 if ui.button("Ouvrir…").clicked() {
                     ouvrir_musique(e);
+                }
+                if ui.button("Test cri").on_hover_text("Quelqu'un parle puis crie : allumez Coupe-cri pour l'entendre coupé").clicked() {
+                    test_cri(e);
                 }
                 ui.add(egui::Label::new(nom.unwrap_or_else(|| "aucun fichier".into())).truncate());
             });
@@ -354,10 +393,21 @@ fn boite_voie(ui: &mut Ui, e: &mut EtatUi, i: usize, maintenant: f64) -> bool {
             ui.add(egui::Slider::new(g, -12.0..=12.0).step_by(1.0).show_value(false));
         });
     }
-    ui.checkbox(&mut v.anti_bruit, "Anti-bruit");
-    ui.checkbox(&mut v.coupe_cri, "Coupe-cri");
-    ui.checkbox(&mut v.limiteur, "Limiteur");
+    let mut ouvrir_reglages = false;
+    let blocs = ui
+        .scope(|ui| {
+            ui.checkbox(&mut v.anti_bruit, "Anti-bruit");
+            ui.checkbox(&mut v.coupe_cri, "Coupe-cri");
+            ui.checkbox(&mut v.limiteur, "Limiteur");
+            ouvrir_reglages = ui.small_button("Réglages…").on_hover_text("Seuils et temps des blocs").clicked();
+        })
+        .response
+        .rect;
     ui.checkbox(&mut v.muet, "Muet");
+    e.fenetre_reglages |= ouvrir_reglages;
+    if i == 0 {
+        e.visite.noter(Zone::Blocs, blocs);
+    }
 
     let micro_ouvert = |s: &SourceMicro| !matches!(s, SourceMicro::Aucun);
     let erreur_source = match (&e.audio, i) {
@@ -423,17 +473,22 @@ fn boite_sortie(ui: &mut Ui, e: &mut EtatUi) -> bool {
 fn fenetres(ui: &mut Ui, e: &mut EtatUi) {
     let ctx = ui.ctx().clone();
     egui::Window::new("Réglages des blocs").open(&mut e.fenetre_reglages).resizable(false).show(&ctx, |ui| {
-        egui::Grid::new("seuils").num_columns(4).spacing([12.0, 6.0]).show(ui, |ui| {
-            ui.label("");
-            ui.label("Seuil limiteur");
-            ui.label("Seuil coupe-cri");
-            ui.label("");
+        egui::Grid::new("seuils").num_columns(7).spacing([12.0, 6.0]).show(ui, |ui| {
+            for t in ["", "Seuil limiteur", "Relâche limiteur", "Seuil coupe-cri", "Réaction coupe-cri", "Porte anti-bruit", ""] {
+                ui.label(t);
+            }
             ui.end_row();
             for i in 0..NB_VOIES {
                 let v = &mut e.reglages.voies[i];
                 ui.label(NOMS[i]);
                 ui.add(egui::DragValue::new(&mut v.seuil_limiteur_db).range(-40.0..=0.0).speed(0.2).suffix(" dB"));
+                ui.add(egui::DragValue::new(&mut v.relache_ms).range(10.0..=2000.0).speed(2.0).max_decimals(0).suffix(" ms"))
+                    .on_hover_text("Temps pour remonter après un pic");
                 ui.add(egui::DragValue::new(&mut v.seuil_cri_db).range(-40.0..=0.0).speed(0.2).suffix(" dB"));
+                ui.add(egui::DragValue::new(&mut v.reaction_cri_ms).range(1.0..=15.0).speed(0.1).max_decimals(1).suffix(" ms"))
+                    .on_hover_text("Temps au-dessus du seuil avant de couper : plus long, un clic ne coupe pas");
+                ui.add(egui::DragValue::new(&mut v.porte_db).range(-80.0..=-20.0).speed(0.2).suffix(" dB"))
+                    .on_hover_text("Sous ce niveau l'Anti-bruit baisse le son de 30 dB");
                 if ui.button("Apprendre le bruit").on_hover_text("1 s de la pièce sans parler").clicked() {
                     v.apprendre = v.apprendre.wrapping_add(1);
                     v.anti_bruit = true;
@@ -443,8 +498,8 @@ fn fenetres(ui: &mut Ui, e: &mut EtatUi) {
         });
     });
     egui::Window::new("Les blocs").open(&mut e.fenetre_aide).resizable(false).show(&ctx, |ui| {
-        ui.label("Anti-bruit   |Y(f)| = max(|X(f)| − 2 N(f), 0,05 |X(f)|), puis une porte sous -50 dBFS");
-        ui.label("Coupe-cri   le son est coupé quand sa valeur efficace dépasse le seuil T");
+        ui.label("Anti-bruit   |Y(f)| = max(|X(f)| − 2 N(f), 0,05 |X(f)|), puis une porte sous P (-50 dBFS par défaut)");
+        ui.label("Coupe-cri   le son est coupé quand sa valeur efficace dépasse le seuil T pendant le temps de réaction");
         ui.label("Limiteur   y = g x, g = min(1, S / |x|)");
         ui.label("Égaliseur   h = gG h_passe-bas + gM h_passe-bande + gA h_passe-haut");
     });

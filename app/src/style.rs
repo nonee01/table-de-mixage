@@ -98,7 +98,8 @@ pub fn boite_groupe(ui: &mut Ui, titre: &str, choisie: bool, largeur: f32, conte
     ui.painter().rect_filled(fond, 0.0, FOND);
     ui.painter().galley(fond.min + vec2(3.0, 0.0), galee, Color32::BLACK);
     // seulement le titre : posée sur tout le cadre, la zone passerait au-dessus des commandes et prendrait leurs clics
-    ui.interact(fond, ui.scope_id().with(titre), Sense::click())
+    // le rect couvre tout le cadre (pour la visite), les clics restent ceux du titre
+    ui.interact(fond, ui.scope_id().with(titre), Sense::click()).union(interieur.response)
 }
 
 fn fraction_db(db: f32) -> f32 {

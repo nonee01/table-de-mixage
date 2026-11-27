@@ -6,7 +6,9 @@ use std::net::{Shutdown, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+use moteur::voie::ReglagesVoie;
 use std::time::{Duration, Instant};
 
 use ringbuf::traits::Producer;
@@ -116,10 +118,100 @@ fn lire(mut flux: impl Read, mut prod: HeapProd<f32>, paquet: Arc<AtomicUsize>, 
 /// Port de l'appli « Micro table » (telephone/ dans ce dépôt).
 pub const PORT_APPLI: u16 = 5005;
 
+// Le lien Wi-Fi avec l'appli : trames `type: u8, longueur: u16 le, contenu`, décrites dans
+// telephone/rust/src/lib.rs (les deux crates ne partagent pas de code : ces fonctions en sont la copie).
+
+fn trame(genre: u8, contenu: &[u8]) -> Vec<u8> {
+    let mut o = vec![genre];
+    o.extend_from_slice(&(contenu.len() as u16).to_le_bytes());
+    o.extend_from_slice(contenu);
+    o
+}
+
+fn lire_trame(r: &mut impl Read) -> std::io::Result<(u8, Vec<u8>)> {
+    let mut tete = [0u8; 3];
+    r.read_exact(&mut tete)?;
+    let mut contenu = vec![0u8; u16::from_le_bytes([tete[1], tete[2]]) as usize];
+    r.read_exact(&mut contenu)?;
+    Ok((tete[0], contenu))
+}
+
+/// Réglages de la voie du téléphone, tels que les trames `C` et `S` les portent.
+fn voie_vers_octets(v: &ReglagesVoie) -> [u8; 10] {
+    let mut o = [0u8; 10];
+    o[0] = v.anti_bruit as u8 | (v.coupe_cri as u8) << 1 | (v.limiteur as u8) << 2;
+    o[1] = v.apprendre as u8;
+    for (k, x) in [v.seuil_cri_db, v.reaction_cri_ms, v.seuil_limiteur_db, v.porte_db].into_iter().enumerate() {
+        o[2 + 2 * k..4 + 2 * k].copy_from_slice(&((x * 10.0).round() as i16).to_le_bytes());
+    }
+    o
+}
+
+/// Applique une trame `C` ; les valeurs restent dans les bornes de la fenêtre Réglages.
+fn appliquer(o: &[u8], v: &mut ReglagesVoie) {
+    if o.len() != 10 {
+        return;
+    }
+    let x = |k: usize| i16::from_le_bytes([o[2 + 2 * k], o[3 + 2 * k]]) as f32 / 10.0;
+    v.anti_bruit = o[0] & 1 != 0;
+    v.coupe_cri = o[0] & 2 != 0;
+    v.limiteur = o[0] & 4 != 0;
+    if o[1] != v.apprendre as u8 {
+        v.apprendre = v.apprendre.wrapping_add(1); // « Apprendre le bruit » tapé sur le téléphone
+        v.anti_bruit = true;
+    }
+    v.seuil_cri_db = x(0).clamp(-40.0, 0.0);
+    v.reaction_cri_ms = x(1).clamp(1.0, 15.0);
+    v.seuil_limiteur_db = x(2).clamp(-40.0, 0.0);
+    v.porte_db = x(3).clamp(-80.0, -20.0);
+}
+
+/// Côté interface du lien Wi-Fi : les réglages demandés par le téléphone, et l'envoi des nôtres.
+pub struct LienWifi {
+    commande: Arc<Mutex<Option<Vec<u8>>>>,
+    socket: TcpStream,
+    envoye: Option<[u8; 10]>,
+}
+
+impl LienWifi {
+    /// Une fois par image : applique ce que le téléphone a changé, puis lui renvoie l'état s'il a bougé.
+    pub fn synchroniser(&mut self, v: &mut ReglagesVoie) {
+        if let Some(c) = self.commande.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            appliquer(&c, v);
+        }
+        let o = voie_vers_octets(v);
+        if self.envoye != Some(o) {
+            use std::io::Write;
+            let _ = (&self.socket).write_all(&trame(b'S', &o)); // téléphone perdu : la voie le dit déjà
+            self.envoye = Some(o);
+        }
+    }
+}
+
+/// Lit les trames de l'appli jusqu'à la fin, puis marque le micro perdu.
+fn lire_trames(mut flux: impl Read, mut prod: HeapProd<f32>, paquet: Arc<AtomicUsize>, perdu: Arc<AtomicBool>, commande: Arc<Mutex<Option<Vec<u8>>>>) {
+    while let Ok((genre, contenu)) = lire_trame(&mut flux) {
+        match genre {
+            b'A' => {
+                let n = contenu.len() / 4 * 4;
+                for v in pcm_vers_mono(&contenu[..n]) {
+                    let _ = prod.try_push(v);
+                }
+                paquet.store(n / 4 + 1, Ordering::Relaxed);
+            }
+            b'C' => *commande.lock().unwrap_or_else(|e| e.into_inner()) = Some(contenu),
+            _ => {}
+        }
+    }
+    perdu.store(true, Ordering::Relaxed);
+}
+
 pub struct Telephone {
     /// adb, numéro de série, port local, serveur scrcpy : seulement par USB.
     usb: Option<(PathBuf, String, String, Child)>,
     socket: TcpStream,
+    /// Seulement par le Wi-Fi ; l'interface le prend.
+    pub lien: Option<LienWifi>,
 }
 
 impl Telephone {
@@ -175,7 +267,7 @@ impl Telephone {
         };
         let lecteur = socket.try_clone().map_err(|e| e.to_string())?;
         std::thread::spawn(move || lire(lecteur, prod, paquet, perdu));
-        Ok(Telephone { usb: Some((adb.to_path_buf(), serie, port, serveur)), socket })
+        Ok(Telephone { usb: Some((adb.to_path_buf(), serie, port, serveur)), socket, lien: None })
     }
 
     /// Se connecte à l'appli « Micro table » du téléphone par le Wi-Fi (le PC appelle : pas de pare-feu à ouvrir).
@@ -202,9 +294,14 @@ impl Telephone {
             return Err("Code refusé par le téléphone".into());
         }
         let _ = socket.set_read_timeout(None);
+        // l'interface écrit l'état à chaque changement : un téléphone figé ne doit pas la bloquer
+        let _ = socket.set_write_timeout(Some(Duration::from_millis(200)));
         let lecteur = socket.try_clone().map_err(|e| e.to_string())?;
-        std::thread::spawn(move || lire(lecteur, prod, paquet, perdu));
-        Ok(Telephone { usb: None, socket })
+        let commande = Arc::new(Mutex::new(None));
+        let c = commande.clone();
+        std::thread::spawn(move || lire_trames(lecteur, prod, paquet, perdu, c));
+        let lien = LienWifi { commande, socket: socket.try_clone().map_err(|e| e.to_string())?, envoye: None };
+        Ok(Telephone { usb: None, socket, lien: Some(lien) })
     }
 }
 
@@ -256,7 +353,8 @@ mod tests {
         assert!(!adb_sortie(&adb, &["forward", "--list"]).unwrap().contains(&format!("tcp:{port}")));
     }
 
-    /// Appli « Micro table » démarrée : `TDM_TELEPHONE="<ip> <code>" cargo test -p table-de-mixage telephone_wifi_vrai -- --ignored`
+    /// Appli « Micro table » démarrée : `TDM_TELEPHONE="<ip> <code>" cargo test -p table-de-mixage telephone_wifi_vrai -- --ignored --nocapture`,
+    /// puis toucher Limiteur sur le téléphone quand le test le demande.
     #[test]
     #[ignore]
     fn telephone_wifi_vrai() {
@@ -268,12 +366,27 @@ mod tests {
         std::thread::sleep(Duration::from_secs(2));
         let n = cons.occupied_len();
         eprintln!("ouvert en {ouvert:?}, {n} échantillons en 2 s");
-        assert!((75_000..=100_000).contains(&n), "{n}"); // le micro du téléphone s'ouvre à la connexion : ~200 ms de moins
+        // le micro s'ouvre à la connexion (~200 ms de moins) ; le Redmi livre d'un coup ses 85 ms de tampon, plus 60 ms en attente
+        assert!((75_000..=105_000).contains(&n), "{n}");
         assert!(!perdu.load(Ordering::Relaxed));
+        // aller-retour des réglages : le PC envoie les siens, on touche Limiteur sur le téléphone,
+        // le téléphone renvoie tous ses contrôles, donc aussi les valeurs reçues du PC
+        let mut t = t;
+        let l = t.lien.as_mut().unwrap();
+        let mut v = ReglagesVoie { anti_bruit: false, coupe_cri: true, limiteur: false, seuil_cri_db: -25.0, reaction_cri_ms: 8.0, seuil_limiteur_db: -6.0, porte_db: -55.0, ..Default::default() };
+        eprintln!("touchez Limiteur sur le téléphone (60 s)");
+        let fin = Instant::now() + Duration::from_secs(60);
+        while !v.limiteur && Instant::now() < fin {
+            l.synchroniser(&mut v);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        eprintln!("revenu du téléphone : {v:?}");
+        assert!(v.limiteur && v.coupe_cri && !v.anti_bruit);
+        assert_eq!((v.seuil_cri_db, v.reaction_cri_ms, v.seuil_limiteur_db, v.porte_db), (-25.0, 8.0, -6.0, -55.0));
         drop(t);
     }
 
-    /// L'appli parle comme scrcpy : un faux téléphone local envoie 480 trames puis raccroche.
+    /// Un faux téléphone local envoie 480 échantillons et des réglages, lit l'état du PC, puis raccroche.
     #[test]
     fn telephone_wifi_recoit_puis_perdu() {
         let ecoute = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -284,17 +397,31 @@ mod tests {
             let mut code = [0u8; 6];
             s.read_exact(&mut code).unwrap();
             assert_eq!(&code, b"012345");
-            s.write_all(&[0u8; 4 * 480]).unwrap();
+            s.write_all(&trame(b'A', &[0u8; 4 * 480])).unwrap();
+            let mut v = ReglagesVoie::default();
+            v.coupe_cri = true;
+            v.seuil_cri_db = -99.0; // hors bornes : ramené à -40
+            v.apprendre = 1;
+            s.write_all(&trame(b'C', &voie_vers_octets(&v))).unwrap();
+            // le PC répond par son état, puis le faux téléphone raccroche
+            assert_eq!(lire_trame(&mut s).unwrap().0, b'S');
         });
         let (prod, cons) = HeapRb::<f32>::new(4096).split();
         let perdu = Arc::new(AtomicBool::new(false));
-        let t = Telephone::wifi(&format!("{adresse} 012345"), prod, Default::default(), perdu.clone()).unwrap();
+        let mut t = Telephone::wifi(&format!("{adresse} 012345"), prod, Default::default(), perdu.clone()).unwrap();
+        let mut lien = t.lien.take().unwrap();
+        let mut v = ReglagesVoie::default();
         let limite = Instant::now() + Duration::from_secs(1);
         while !perdu.load(Ordering::Relaxed) && Instant::now() < limite {
+            lien.synchroniser(&mut v);
             std::thread::sleep(Duration::from_millis(10));
         }
+        lien.synchroniser(&mut v);
         assert!(perdu.load(Ordering::Relaxed));
         assert_eq!(cons.occupied_len(), 480);
+        assert!(v.coupe_cri && !v.limiteur);
+        assert_eq!(v.seuil_cri_db, -40.0);
+        assert_eq!((v.apprendre, v.anti_bruit), (1, true));
         drop(t);
         for mauvais in ["", "127.0.0.1", "127.0.0.1 12a456"] {
             assert!(Telephone::wifi(mauvais, HeapRb::<f32>::new(4).split().0, Default::default(), Default::default()).is_err());
