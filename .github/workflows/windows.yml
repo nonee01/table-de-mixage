@@ -14,7 +14,23 @@ permissions:
   actions: read # SignPath lit l'artefact non signé
 
 jobs:
+  # l'appli « Micro table » pour le dossier telephone\ du zip (les runners Ubuntu ont le SDK et le NDK Android)
+  telephone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          targets: aarch64-linux-android
+      - name: APK
+        run: bash telephone/construire.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: micro-table-apk
+          path: telephone/app/build/outputs/apk/debug/app-debug.apk
+
   windows:
+    needs: telephone
     runs-on: windows-latest
     env:
       # renseignées dans Settings > Secrets and variables > Actions une fois le projet accepté par SignPath
@@ -23,6 +39,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: micro-table-apk
+          path: telephone/app/build/outputs/apk/debug
 
       - name: Tests du moteur
         run: cargo test -p moteur
@@ -77,7 +97,7 @@ jobs:
         run: |
           cd "dist/Table de mixage"
           ls -la . piper voix | head -40
-          test -f table-de-mixage.exe && test -f piper/piper.exe && test -f voix/fr_FR-siwis-medium.onnx
+          test -f table-de-mixage.exe && test -f piper/piper.exe && test -f voix/fr_FR-siwis-medium.onnx && test -f smart-app-control.bat
           echo "Bonjour, ceci est un test." | ./piper/piper.exe -m voix/fr_FR-siwis-medium.onnx -f test.wav
           test -s test.wav
 

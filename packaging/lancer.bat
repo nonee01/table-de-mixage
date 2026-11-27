@@ -6,6 +6,12 @@ if not exist "table-de-mixage.exe" (
   pause
   exit /b 1
 )
+rem le programme n'est pas signe : Smart App Control le bloquerait
+call smart-app-control.bat
+if errorlevel 1 (
+  pause
+  exit /b 1
+)
 start "" "%~dp0table-de-mixage.exe"
 if errorlevel 1 (
   echo Windows a refuse de lancer le programme. Voir LISEZMOI.txt.

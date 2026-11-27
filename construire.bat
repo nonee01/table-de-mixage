@@ -17,9 +17,8 @@ echo  TABLE DE MIXAGE - installation et construction
 echo  La premiere fois : environ 5 Go a telecharger et 30 a 45 minutes. Internet necessaire.
 echo.
 
-rem Smart App Control bloque tout programme non signe, meme construit ici : inutile d'aller plus loin
-reg query "HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy" /v VerifiedAndReputablePolicyState 2>nul | find "0x1" >nul
-if not errorlevel 1 goto sac
+call "packaging\smart-app-control.bat" %1
+if errorlevel 1 goto fin
 if not exist "%CURL%" goto vieux_windows
 if not exist "%TAR%" goto vieux_windows
 
@@ -69,6 +68,7 @@ move /y "%TEMPO%\voix.onnx" "%VOIX%" >nul || goto echec
 :fichiers
 copy /y "packaging\voix\fr_FR-siwis-medium.onnx.json" "%SORTIE%\voix\" >nul || goto echec
 copy /y "packaging\lancer.bat" "%SORTIE%\Lancer la table de mixage.bat" >nul || goto echec
+copy /y "packaging\smart-app-control.bat" "%SORTIE%\" >nul || goto echec
 copy /y "packaging\LISEZMOI.txt" "%SORTIE%\" >nul || goto echec
 
 echo.
@@ -78,14 +78,6 @@ echo.
 if /i "%~1"=="/ci" exit /b 0
 call "%SORTIE%\Lancer la table de mixage.bat"
 exit /b 0
-
-:sac
-echo  Smart App Control est ACTIVE sur ce PC : il bloque tout programme non signe,
-echo  y compris celui que ce fichier construirait. Desactivez-le d'abord :
-echo  Parametres ^> Confidentialite et securite ^> Securite Windows ^>
-echo  Controle des applications et du navigateur ^> Smart App Control ^> Desactive.
-echo  Puis relancez ce fichier. On peut le reactiver ensuite au meme endroit.
-goto fin
 
 :vieux_windows
 echo  curl ou tar manque : il faut Windows 10 version 1803 ou plus recent.

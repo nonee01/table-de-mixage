@@ -36,10 +36,12 @@ cp "$VOIX" "$SORTIE/voix/"
 cp packaging/voix/fr_FR-siwis-medium.onnx.json "$SORTIE/voix/"
 
 APK=telephone/app/build/outputs/apk/debug/app-debug.apk
-if [ -f "$APK" ]; then cp "$APK" "$SORTIE/telephone/Micro table.apk"; else echo "attention : APK absent (telephone/construire.sh)" >&2; fi
+# dans la CI le zip publie doit avoir l'appli : son absence est une erreur
+if [ -f "$APK" ]; then cp "$APK" "$SORTIE/telephone/Micro table.apk"; else echo "attention : APK absent (telephone/construire.sh)" >&2; [ -z "${CI:-}" ] || exit 1; fi
 
 # le .bat est déjà en fins de ligne Windows (.gitattributes) ; le texte, on le convertit
 cp packaging/lancer.bat "$SORTIE/Lancer la table de mixage.bat"
+cp packaging/smart-app-control.bat "$SORTIE/"
 sed 's/$/\r/' packaging/LISEZMOI.txt > "$SORTIE/LISEZMOI.txt"
 
 rm -f dist/Table-de-mixage-windows.zip

@@ -7,16 +7,14 @@ DEMARRER
   Ecoutez au casque ou aux ecouteurs : micro + haut-parleurs du PC = effet Larsen.
 
 SI WINDOWS REFUSE DE LE LANCER
-  Pour savoir si Smart App Control est actif, dans l'invite de commandes (cmd) :
-    reg query HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState
-  0x1 = actif (il faut le desactiver, voir ci-dessous) ; 0x0, 0x2 ou rien = le programme se lance.
-  « Windows a protege votre ordinateur » (SmartScreen) : Informations complementaires,
-  puis Executer quand meme.
-  « Une partie de cette application a ete bloquee » (Smart App Control) : le programme
-  n'est pas signe. Parametres > Confidentialite et securite > Securite Windows >
+  Smart App Control bloque tout programme non signe, dont celui-ci. Le lanceur le detecte
+  et propose de le desactiver : repondez O, puis Oui a la demande de Windows.
+  A la main : Parametres > Confidentialite et securite > Securite Windows >
   Controle des applications et du navigateur > Smart App Control > Desactive.
   Depuis la mise a jour d'avril 2026 de Windows 11, on peut le reactiver ensuite
   au meme endroit.
+  « Windows a protege votre ordinateur » (SmartScreen) : Informations complementaires,
+  puis Executer quand meme.
 
 LE TELEPHONE COMME MICRO (Android 9 ou plus)
   1. Installez telephone\Micro table.apk sur le telephone (copie par cable ou par message,
@@ -42,3 +40,4 @@ CONTENU
   table-de-mixage.exe   le programme
   piper\, voix\         la voix de synthese (Piper, voix francaise siwis)
   telephone\            l'appli Android « Micro table »
+  smart-app-control.bat utilise par le lanceur (voir ci-dessus)
