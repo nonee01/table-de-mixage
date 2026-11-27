@@ -2,3 +2,4 @@ target/
 .superpowers/
 dist/
 packaging/cache/
+.syncthing.*
