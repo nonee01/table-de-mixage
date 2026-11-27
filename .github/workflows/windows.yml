@@ -23,7 +23,8 @@ jobs:
         with:
           targets: aarch64-linux-android
       - name: APK
-        run: bash telephone/construire.sh
+        # le Java par défaut du runner (25) est trop récent pour ce Gradle ; l'appli vise Java 17
+        run: JAVA_HOME="$JAVA_HOME_17_X64" bash telephone/construire.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: micro-table-apk
